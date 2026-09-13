@@ -141,8 +141,17 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <HeroUINativeProvider>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ title: 'Habits', headerShown: false }} />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" options={{ title: 'HackMatch' }} />
+          <Stack.Screen name="role" options={{ title: 'Choose access' }} />
+          <Stack.Screen name="admin/index" options={{ title: 'Admin dashboard' }} />
+          <Stack.Screen name="invite" options={{ title: 'Confirm invitation' }} />
+          <Stack.Screen name="profile/setup" options={{ title: 'Create profile' }} />
+          <Stack.Screen name="profile/index" options={{ title: 'My profile' }} />
+          <Stack.Screen name="profile/edit" options={{ title: 'Edit profile' }} />
+          <Stack.Screen name="find-team" options={{ title: 'Find your team' }} />
+          <Stack.Screen name="group/create" options={{ title: 'Create group' }} />
+          <Stack.Screen name="channel/[id]" options={{ title: 'Channel' }} />
         </Stack>
         <InstallPrompt />
       </HeroUINativeProvider>
