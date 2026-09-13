@@ -33,11 +33,9 @@ export function TeamRequestActions({
     setError(null);
     try {
       const request = await sendTeamInvite(identity, recipientId, message);
-      if (!request.id)
-        throw new Error('The request was sent, but its conversation could not be opened.');
       setSent(true);
       onSent?.(request);
-      router.push(requestThreadHref(request.id, recipientName));
+      if (request.id) router.push(requestThreadHref(request.id, recipientName));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'The request could not be sent.');
     } finally {

@@ -99,7 +99,7 @@ function Content() {
       const request = await sendTeamInvite(identity, reverseRequest.item.from_user_id, null);
       const recipientName = reverseRequest.item.from_name ?? 'Team-up request';
       setReverseRequest(null);
-      router.push(requestThreadHref(request.id, recipientName));
+      if (request.id) router.push(requestThreadHref(request.id, recipientName));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'The request could not be sent.');
     } finally {

@@ -368,23 +368,45 @@ export async function getRecommendations(
   >(`/recommendations/${encodeURIComponent(identity.userId)}`, {}, identity.accessToken);
   return Array.isArray(result) ? result : asArray(result.recommendations ?? result.data);
 }
-export function sendTeamInvite(
+export async function sendTeamInvite(
   identity: ParticipantIdentity,
   toUserId: string,
   note: string | null = null,
-) {
-  return request<TeamRequest | { invite: TeamRequest }>(
+): Promise<TeamRequest> {
+  const normalizedNote = note?.trim() || null;
+  const result = await request<
+    | TeamRequest
+    | { invite: TeamRequest }
+    | { request: TeamRequest }
+    | { invite_id?: string; id?: string; status?: string }
+  >(
     '/invite',
     {
       method: 'POST',
       body: JSON.stringify({
         from_user_id: identity.userId,
+        // Keep the legacy sender field while deployed APIs transition to from_user_id.
+        user_id: identity.userId,
         to_user_id: toUserId,
-        note: note?.trim() || null,
+        note: normalizedNote,
       }),
     },
     identity.accessToken,
-  ).then((result) => ('invite' in result ? result.invite : result));
+  );
+
+  if ('invite' in result) return result.invite;
+  if ('request' in result) return result.request;
+
+  const inviteId = result.id ?? ('invite_id' in result ? result.invite_id : undefined) ?? '';
+
+  return {
+    ...result,
+    id: inviteId,
+    from_user_id: identity.userId,
+    to_user_id: toUserId,
+    note: normalizedNote,
+    status: 'sent',
+  };
 }
 export async function getTeamRequests(identity: ParticipantIdentity) {
   const result = await request<
