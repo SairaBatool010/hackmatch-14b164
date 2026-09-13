@@ -72,8 +72,8 @@ interface StoredPreviewGroupInvite {
 
 const REQUESTS_KEY = 'hackmatch-preview-requests';
 // Versioned keys intentionally start the simplified team-invitation test flow with clean data.
-const GROUPS_KEY = 'hackmatch-preview-groups-v2';
-const GROUP_INVITES_KEY = 'hackmatch-preview-group-invites-v2';
+const GROUPS_KEY = 'hackmatch-preview-groups-v3';
+const GROUP_INVITES_KEY = 'hackmatch-preview-group-invites-v3';
 const MESSAGE_KEY_PREFIX = 'hackmatch-preview-request-messages:';
 
 function participantName(userId: string) {
