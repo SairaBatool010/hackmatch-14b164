@@ -1,12 +1,13 @@
 import { useCallback, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Button, Card, Spinner, Typography } from 'heroui-native';
+import { Button, Card, Input, Spinner, Typography } from 'heroui-native';
 import { Bell, Check, Inbox, MessageCircle } from 'lucide-react-native';
 import { AppShell } from '@/components/AppShell';
 import { ParticipantTabGuard } from '@/components/ParticipantTabGuard';
 import {
   ApiError,
+  confirmGroupInvite,
   getGroupInvites,
   getTeamRequests,
   respondToGroupInvite,
@@ -15,7 +16,7 @@ import {
 } from '@/lib/hackmatch.api';
 import { useHackmatchStore } from '@/lib/hackmatch.store';
 import type { GroupInvite, InviteConflict } from '@/lib/hackmatch.types';
-import { requestThreadHref } from '@/lib/navigation';
+import { channelHref, requestThreadHref } from '@/lib/navigation';
 
 type ActivityItem = GroupInvite & { kind: 'group' | 'request' };
 
@@ -35,6 +36,7 @@ function Content() {
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [codes, setCodes] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [reverseRequest, setReverseRequest] = useState<{
     item: ActivityItem;
@@ -87,6 +89,26 @@ function Content() {
       } else {
         setError(caught instanceof Error ? caught.message : 'The request could not be updated.');
       }
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const confirmInvitation = async (item: ActivityItem) => {
+    const code = codes[item.id]?.trim() ?? '';
+    if (!identity || item.kind !== 'group' || code.length !== 6 || busyId) return;
+    setBusyId(item.id);
+    setError(null);
+    try {
+      const result = await confirmGroupInvite(identity, item.id, code);
+      setCodes((current) => ({ ...current, [item.id]: '' }));
+      await load();
+      if (result.channel) router.push(channelHref(result.channel));
+      else router.push('/(tabs)/dms');
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : 'The invitation code could not be confirmed.',
+      );
     } finally {
       setBusyId(null);
     }
@@ -152,27 +174,46 @@ function Content() {
       {items.length ? (
         <View className="gap-3">
           {items.map((item) => {
-            const outgoingRequest = item.kind === 'request' && item.direction === 'outgoing';
-            const outgoingDecline = outgoingRequest && item.status === 'declined';
-            const outgoingAccepted = outgoingRequest && item.status === 'accepted';
-            const pendingIncoming =
-              item.direction !== 'outgoing' && (!item.status || item.status === 'pending');
-            const title = outgoingDecline
-              ? 'Request declined'
-              : outgoingAccepted
-                ? 'Request accepted'
-                : outgoingRequest
-                  ? 'Request sent'
-                  : item.kind === 'request'
-                    ? 'Team-up request'
-                    : 'Team invitation';
-            const description = outgoingRequest
-              ? outgoingDecline
-                ? `Your request to ${item.to_name ?? 'this participant'} was declined. Keep looking for a match.`
-                : outgoingAccepted
-                  ? `${item.to_name ?? 'This participant'} accepted your team-up request.`
-                  : `You sent a team-up request to ${item.to_name ?? 'this participant'}.`
-              : `${item.from_name ?? 'A participant'} wants to team up${item.group_name ? ` in ${item.group_name}` : ''}.`;
+            const outgoing = item.direction === 'outgoing';
+            const pending = !item.status || item.status === 'pending' || item.status === 'sent';
+            const pendingIncoming = !outgoing && pending;
+            const codedGroupInvite = item.kind === 'group' && item.confirmation_required !== false;
+            const conversationId = item.direct_conversation_id ?? item.id;
+            const personName = outgoing
+              ? (item.to_name ?? 'Participant')
+              : (item.from_name ?? 'Participant');
+            const title =
+              item.kind === 'group'
+                ? item.status === 'confirmed'
+                  ? 'Team invitation confirmed'
+                  : item.status === 'declined'
+                    ? 'Team invitation declined'
+                    : outgoing
+                      ? 'Invitation code sent'
+                      : 'Confirm team invitation'
+                : outgoing && item.status === 'declined'
+                  ? 'Request declined'
+                  : outgoing && item.status === 'accepted'
+                    ? 'Request accepted'
+                    : outgoing
+                      ? 'Request sent'
+                      : 'Team-up request';
+            const description =
+              item.kind === 'group'
+                ? item.status === 'confirmed'
+                  ? `The invitation to ${item.group_name ?? 'the team'} was confirmed. The team chat is now available.`
+                  : item.status === 'declined'
+                    ? `The invitation to ${item.group_name ?? 'the team'} was declined.`
+                    : outgoing
+                      ? `A one-time code for ${item.group_name ?? 'your team'} was sent automatically in your DM with ${personName}.`
+                      : `${personName} invited you to ${item.group_name ?? 'a team'}. Get the one-time code from your DM and enter it below.`
+                : outgoing
+                  ? item.status === 'declined'
+                    ? `Your request to ${personName} was declined. Keep looking for a match.`
+                    : item.status === 'accepted'
+                      ? `${personName} accepted your team-up request.`
+                      : `You sent a team-up request to ${personName}.`
+                  : `${personName} wants to team up.`;
             return (
               <Card key={`${item.kind}-${item.id}`} className="gap-4 p-5">
                 <Bell size={21} />
@@ -183,23 +224,46 @@ function Content() {
                     <Typography>{item.note}</Typography>
                   </Card>
                 ) : null}
-                {item.kind === 'request' ? (
-                  <Button
-                    variant="secondary"
-                    onPress={() =>
-                      router.push(
-                        requestThreadHref(
-                          item.id,
-                          item.from_name ?? item.to_name ?? 'Request chat',
-                        ),
-                      )
-                    }
-                  >
-                    <MessageCircle size={16} />
-                    <Button.Label>Open chat</Button.Label>
-                  </Button>
-                ) : null}
-                {pendingIncoming ? (
+                <Button
+                  variant="secondary"
+                  onPress={() => router.push(requestThreadHref(conversationId, personName))}
+                >
+                  <MessageCircle size={16} />
+                  <Button.Label>Open DM</Button.Label>
+                </Button>
+                {pendingIncoming && codedGroupInvite ? (
+                  <View className="gap-3">
+                    <Input
+                      value={codes[item.id] ?? ''}
+                      onChangeText={(value) =>
+                        setCodes((current) => ({
+                          ...current,
+                          [item.id]: value.replace(/\D/g, '').slice(0, 6),
+                        }))
+                      }
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      placeholder="6-digit invitation code"
+                    />
+                    <View className="flex-row gap-2">
+                      <Button
+                        variant="secondary"
+                        isDisabled={busyId === item.id}
+                        onPress={() => void respond(item, false)}
+                      >
+                        <Button.Label>Decline</Button.Label>
+                      </Button>
+                      <Button
+                        className="flex-1"
+                        isDisabled={busyId === item.id || (codes[item.id]?.length ?? 0) !== 6}
+                        onPress={() => void confirmInvitation(item)}
+                      >
+                        <Check size={15} />
+                        <Button.Label>Confirm code</Button.Label>
+                      </Button>
+                    </View>
+                  </View>
+                ) : pendingIncoming && item.kind === 'request' ? (
                   <View className="flex-row gap-2">
                     <Button
                       variant="secondary"

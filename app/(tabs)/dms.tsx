@@ -5,15 +5,39 @@ import { ChevronRight, MessageCircle, Plus, Users } from 'lucide-react-native';
 import { View } from 'react-native';
 import { AppShell } from '@/components/AppShell';
 import { ParticipantTabGuard } from '@/components/ParticipantTabGuard';
-import { getChannels, getTeamRequests } from '@/lib/hackmatch.api';
+import { getChannels, getGroupInvites, getTeamRequests } from '@/lib/hackmatch.api';
 import { useHackmatchStore } from '@/lib/hackmatch.store';
-import type { Channel, TeamRequest } from '@/lib/hackmatch.types';
+import type { Channel, GroupInvite, TeamRequest } from '@/lib/hackmatch.types';
 import { channelHref, requestThreadHref } from '@/lib/navigation';
+
+type DirectConversation = {
+  conversationId: string;
+  participantId: string;
+  personName: string;
+  createdAt: string;
+};
+
+function toDirectConversation(
+  item: TeamRequest | GroupInvite,
+  currentUserId: string,
+): DirectConversation | null {
+  const outgoing = item.from_user_id === currentUserId;
+  const participantId = outgoing ? item.to_user_id : item.from_user_id;
+  if (!participantId) return null;
+  return {
+    conversationId: item.direct_conversation_id ?? item.id,
+    participantId,
+    personName: outgoing ? (item.to_name ?? 'Participant') : (item.from_name ?? 'Participant'),
+    createdAt: item.created_at ?? '',
+  };
+}
+
 function Content() {
   const router = useRouter();
   const identity = useHackmatchStore((s) => s.identity);
   const [teams, setTeams] = useState<Channel[]>([]);
   const [requests, setRequests] = useState<TeamRequest[]>([]);
+  const [groupInvites, setGroupInvites] = useState<GroupInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
@@ -23,12 +47,14 @@ function Content() {
     }
     setLoading(true);
     try {
-      const [channels, teamRequests] = await Promise.all([
+      const [channels, teamRequests, invitations] = await Promise.all([
         getChannels(identity),
         getTeamRequests(identity),
+        getGroupInvites(identity),
       ]);
       setTeams(channels.filter((channel) => channel.type === 'my_group' || channel.group_id));
       setRequests(teamRequests);
+      setGroupInvites(invitations);
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Conversations could not be loaded.');
@@ -41,26 +67,23 @@ function Content() {
       void load();
     }, [load]),
   );
-  const directConversations = Array.from(
-    requests
-      .reduce((conversations, request) => {
-        const outgoing = request.from_user_id === identity?.userId;
-        const participantId = outgoing ? request.to_user_id : request.from_user_id;
-        const personName = outgoing
-          ? (request.to_name ?? 'Participant')
-          : (request.from_name ?? 'Participant');
-        const existing = conversations.get(participantId);
-        const requestTime = request.created_at ? Date.parse(request.created_at) : 0;
-        const existingTime = existing?.request.created_at
-          ? Date.parse(existing.request.created_at)
-          : 0;
-        if (!existing || requestTime >= existingTime) {
-          conversations.set(participantId, { request, personName });
-        }
-        return conversations;
-      }, new Map<string, { request: TeamRequest; personName: string }>())
-      .values(),
-  );
+  const directConversations = identity
+    ? Array.from(
+        [...requests, ...groupInvites]
+          .map((item) => toDirectConversation(item, identity.userId))
+          .filter((item): item is DirectConversation => item !== null)
+          .reduce((conversations, conversation) => {
+            const existing = conversations.get(conversation.participantId);
+            const conversationTime = Date.parse(conversation.createdAt) || 0;
+            const existingTime = existing ? Date.parse(existing.createdAt) || 0 : 0;
+            if (!existing || conversationTime >= existingTime) {
+              conversations.set(conversation.participantId, conversation);
+            }
+            return conversations;
+          }, new Map<string, DirectConversation>())
+          .values(),
+      )
+    : [];
   if (loading)
     return (
       <View className="flex-1 items-center justify-center">
@@ -89,20 +112,20 @@ function Content() {
           {directConversations.length ? (
             <View className="gap-3">
               <Typography.Heading className="text-lg">Direct messages</Typography.Heading>
-              {directConversations.map(({ request, personName }) => (
+              {directConversations.map((conversation) => (
                 <Button
-                  key={
-                    request.from_user_id === identity?.userId
-                      ? request.to_user_id
-                      : request.from_user_id
-                  }
+                  key={conversation.participantId}
                   variant="secondary"
                   className="h-auto justify-start p-4"
-                  onPress={() => router.push(requestThreadHref(request.id, personName))}
+                  onPress={() =>
+                    router.push(
+                      requestThreadHref(conversation.conversationId, conversation.personName),
+                    )
+                  }
                 >
                   <MessageCircle size={21} />
                   <View className="flex-1 items-start">
-                    <Button.Label>{personName}</Button.Label>
+                    <Button.Label>{conversation.personName}</Button.Label>
                     <Typography.Paragraph color="muted">Direct message</Typography.Paragraph>
                   </View>
                   <ChevronRight size={18} />

@@ -2,7 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
   Channel,
   ChannelMessage,
+  ConfirmGroupInviteResult,
   Group,
+  GroupInvite,
   GroupMember,
   ParticipantIdentity,
   ParticipantSearchResult,
@@ -59,8 +61,20 @@ interface StoredPreviewGroup {
   created_at: string;
 }
 
+interface StoredPreviewGroupInvite {
+  id: string;
+  group_id: string;
+  from_user_id: string;
+  to_user_id: string;
+  confirmation_code: string;
+  status: 'pending' | 'confirmed' | 'declined';
+  created_at: string;
+  expires_at: string;
+}
+
 const REQUESTS_KEY = 'hackmatch-preview-requests';
 const GROUPS_KEY = 'hackmatch-preview-groups';
+const GROUP_INVITES_KEY = 'hackmatch-preview-group-invites';
 const MESSAGE_KEY_PREFIX = 'hackmatch-preview-request-messages:';
 
 function participantName(userId: string) {
@@ -111,6 +125,31 @@ function isStoredPreviewGroup(value: unknown): value is StoredPreviewGroup {
   );
 }
 
+function isStoredPreviewGroupInvite(value: unknown): value is StoredPreviewGroupInvite {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.group_id === 'string' &&
+    typeof value.from_user_id === 'string' &&
+    typeof value.to_user_id === 'string' &&
+    typeof value.confirmation_code === 'string' &&
+    (value.status === 'pending' || value.status === 'confirmed' || value.status === 'declined') &&
+    typeof value.created_at === 'string' &&
+    typeof value.expires_at === 'string'
+  );
+}
+
+async function readPreviewGroupInvites(): Promise<StoredPreviewGroupInvite[]> {
+  const value = await AsyncStorage.getItem(GROUP_INVITES_KEY);
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter(isStoredPreviewGroupInvite) : [];
+  } catch {
+    return [];
+  }
+}
+
 async function readPreviewGroups(): Promise<StoredPreviewGroup[]> {
   const value = await AsyncStorage.getItem(GROUPS_KEY);
   if (!value) return [];
@@ -143,7 +182,10 @@ export async function createPreviewGroup(
 export async function getPreviewGroupChannels(identity: ParticipantIdentity): Promise<Channel[]> {
   const groups = await readPreviewGroups();
   return groups
-    .filter((group) => group.member_user_ids.includes(identity.userId))
+    .filter(
+      (group) =>
+        group.member_user_ids.length > 1 && group.member_user_ids.includes(identity.userId),
+    )
     .map((group) => ({
       id: `preview-channel-${group.id}`,
       name: group.name,
@@ -168,6 +210,148 @@ export async function getPreviewGroupMembers(groupId: string): Promise<GroupMemb
       team_status: 'forming',
     };
   });
+}
+
+function previewGroupInvite(
+  invite: StoredPreviewGroupInvite,
+  group: StoredPreviewGroup | undefined,
+  identity: ParticipantIdentity,
+): GroupInvite {
+  return {
+    id: invite.id,
+    group_id: invite.group_id,
+    group_name: group?.name ?? 'Team',
+    from_user_id: invite.from_user_id,
+    to_user_id: invite.to_user_id,
+    from_name: participantName(invite.from_user_id),
+    to_name: participantName(invite.to_user_id),
+    status: invite.status,
+    direction: invite.from_user_id === identity.userId ? 'outgoing' : 'incoming',
+    created_at: invite.created_at,
+    expires_at: invite.expires_at,
+    confirmation_required: invite.status === 'pending',
+    direct_conversation_id: invite.id,
+  };
+}
+
+export async function createPreviewGroupInvite(
+  identity: ParticipantIdentity,
+  groupId: string,
+  toUserId: string,
+): Promise<GroupInvite> {
+  const [groups, invites] = await Promise.all([readPreviewGroups(), readPreviewGroupInvites()]);
+  const group = groups.find((item) => item.id === groupId);
+  if (!group || group.leader_user_id !== identity.userId) {
+    throw new Error('Only the team lead can invite participants to this team.');
+  }
+
+  const existing = invites.find(
+    (item) =>
+      item.group_id === groupId && item.to_user_id === toUserId && item.status === 'pending',
+  );
+  if (existing) return previewGroupInvite(existing, group, identity);
+
+  const timestamp = Date.now();
+  const invite: StoredPreviewGroupInvite = {
+    id: `preview-group-invite-${timestamp}`,
+    group_id: groupId,
+    from_user_id: identity.userId,
+    to_user_id: toUserId,
+    confirmation_code: String(Math.floor(100000 + Math.random() * 900000)),
+    status: 'pending',
+    created_at: new Date(timestamp).toISOString(),
+    expires_at: new Date(timestamp + 24 * 60 * 60 * 1000).toISOString(),
+  };
+  await AsyncStorage.setItem(GROUP_INVITES_KEY, JSON.stringify([invite, ...invites]));
+
+  const conversationKey = [identity.userId, toUserId].sort().join(':');
+  const messages = await readPreviewMessages(conversationKey);
+  const message: ChannelMessage = {
+    id: `preview-message-${timestamp}`,
+    channel_id: conversationKey,
+    user_id: identity.userId,
+    author_name: identity.name,
+    body: `Invitation code for ${group.name}: ${invite.confirmation_code}. Enter this code in Activity to join the team.`,
+    created_at: invite.created_at,
+  };
+  await AsyncStorage.setItem(
+    `${MESSAGE_KEY_PREFIX}${conversationKey}`,
+    JSON.stringify([...messages, message]),
+  );
+  return previewGroupInvite(invite, group, identity);
+}
+
+export async function getPreviewGroupInvites(
+  identity: ParticipantIdentity,
+): Promise<GroupInvite[]> {
+  const [groups, invites] = await Promise.all([readPreviewGroups(), readPreviewGroupInvites()]);
+  return invites
+    .filter(
+      (invite) => invite.from_user_id === identity.userId || invite.to_user_id === identity.userId,
+    )
+    .map((invite) =>
+      previewGroupInvite(
+        invite,
+        groups.find((group) => group.id === invite.group_id),
+        identity,
+      ),
+    );
+}
+
+export async function respondToPreviewGroupInvite(inviteId: string, accept: boolean) {
+  if (accept) throw new Error('Enter the invitation code to join this team.');
+  const invites = await readPreviewGroupInvites();
+  const invite = invites.find((item) => item.id === inviteId);
+  if (!invite) throw new Error('This team invitation could not be found.');
+  const next = invites.map((item) =>
+    item.id === inviteId ? { ...item, status: 'declined' as const } : item,
+  );
+  await AsyncStorage.setItem(GROUP_INVITES_KEY, JSON.stringify(next));
+  return { status: 'declined' };
+}
+
+export async function confirmPreviewGroupInvite(
+  identity: ParticipantIdentity,
+  inviteId: string,
+  code: string,
+): Promise<ConfirmGroupInviteResult> {
+  const [invites, groups] = await Promise.all([readPreviewGroupInvites(), readPreviewGroups()]);
+  const invite = invites.find((item) => item.id === inviteId);
+  if (!invite || invite.to_user_id !== identity.userId) {
+    throw new Error('This team invitation is not available for this account.');
+  }
+  if (invite.status !== 'pending') throw new Error('This invitation has already been used.');
+  if (Date.parse(invite.expires_at) < Date.now())
+    throw new Error('This invitation code has expired.');
+  if (invite.confirmation_code !== code.trim())
+    throw new Error('That invitation code is incorrect.');
+
+  const group = groups.find((item) => item.id === invite.group_id);
+  if (!group) throw new Error('This team is no longer available.');
+  const nextInvites = invites.map((item) =>
+    item.id === inviteId ? { ...item, status: 'confirmed' as const } : item,
+  );
+  const nextGroups = groups.map((item) =>
+    item.id === group.id && !item.member_user_ids.includes(identity.userId)
+      ? { ...item, member_user_ids: [...item.member_user_ids, identity.userId] }
+      : item,
+  );
+  await Promise.all([
+    AsyncStorage.setItem(GROUP_INVITES_KEY, JSON.stringify(nextInvites)),
+    AsyncStorage.setItem(GROUPS_KEY, JSON.stringify(nextGroups)),
+  ]);
+  return {
+    status: 'confirmed',
+    group_id: group.id,
+    channel: {
+      id: `preview-channel-${group.id}`,
+      name: group.name,
+      description: 'Your private team collaboration space.',
+      type: 'my_group',
+      group_id: group.id,
+      allows_posting: true,
+    },
+  };
 }
 
 async function readPreviewRequests(): Promise<StoredPreviewRequest[]> {
@@ -238,10 +422,15 @@ export async function respondToPreviewTeamRequest(inviteId: string, accept: bool
 }
 
 async function previewConversationKey(inviteId: string): Promise<string> {
-  const requests = await readPreviewRequests();
+  const [requests, groupInvites] = await Promise.all([
+    readPreviewRequests(),
+    readPreviewGroupInvites(),
+  ]);
   const request = requests.find((item) => item.id === inviteId);
-  if (!request) return inviteId;
-  return [request.from_user_id, request.to_user_id].sort().join(':');
+  if (request) return [request.from_user_id, request.to_user_id].sort().join(':');
+  const groupInvite = groupInvites.find((item) => item.id === inviteId);
+  if (groupInvite) return [groupInvite.from_user_id, groupInvite.to_user_id].sort().join(':');
+  return inviteId;
 }
 
 async function readPreviewMessages(key: string): Promise<ChannelMessage[]> {

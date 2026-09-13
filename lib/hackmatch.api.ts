@@ -1,13 +1,17 @@
 import { bilt } from '@/lib/bilt';
 import {
+  confirmPreviewGroupInvite,
   createPreviewGroup,
+  createPreviewGroupInvite,
   createPreviewTeamRequest,
   getPreviewGroupChannels,
+  getPreviewGroupInvites,
   getPreviewGroupMembers,
   getPreviewInviteMessages,
   getPreviewTeamRequests,
   postPreviewInviteMessage,
   PREVIEW_PARTICIPANTS,
+  respondToPreviewGroupInvite,
   respondToPreviewTeamRequest,
   searchPreviewParticipants,
 } from '@/lib/hackmatch.preview';
@@ -18,6 +22,7 @@ import type {
   AdminTeamSummary,
   Channel,
   ChannelMessage,
+  ConfirmGroupInviteResult,
   CreateChannelValues,
   Group,
   GroupInvite,
@@ -510,16 +515,21 @@ export async function searchParticipants(identity: ParticipantIdentity, query: s
   >(`/users/search?q=${encodeURIComponent(query)}`, {}, identity.accessToken);
   return Array.isArray(result) ? result : asArray(result.users ?? result.data);
 }
-export function inviteToGroup(identity: ParticipantIdentity, groupId: string, toUserId: string) {
-  if (shouldUsePreviewData(identity)) return Promise.resolve({ status: 'sent' });
-  return request<{ status: string }>(
+export async function inviteToGroup(
+  identity: ParticipantIdentity,
+  groupId: string,
+  toUserId: string,
+): Promise<GroupInvite> {
+  if (shouldUsePreviewData(identity)) return createPreviewGroupInvite(identity, groupId, toUserId);
+  const result = await request<GroupInvite | { invitation: GroupInvite }>(
     '/group/invite',
     { method: 'POST', body: JSON.stringify({ group_id: groupId, to_user_id: toUserId }) },
     identity.accessToken,
   );
+  return 'invitation' in result ? result.invitation : result;
 }
 export async function getGroupInvites(identity: ParticipantIdentity) {
-  if (shouldUsePreviewData(identity)) return [];
+  if (shouldUsePreviewData(identity)) return getPreviewGroupInvites(identity);
   const result = await request<
     GroupInvite[] | { data?: GroupInvite[]; invitations?: GroupInvite[] }
   >(`/group/invites?user_id=${encodeURIComponent(identity.userId)}`, {}, identity.accessToken);
@@ -530,9 +540,18 @@ export function respondToGroupInvite(
   inviteId: string,
   accept: boolean,
 ) {
+  if (shouldUsePreviewData(identity)) return respondToPreviewGroupInvite(inviteId, accept);
   return request<{ status: string }>(
     `/group/invite/${encodeURIComponent(inviteId)}/respond`,
     { method: 'POST', body: JSON.stringify({ accept }) },
+    identity.accessToken,
+  );
+}
+export function confirmGroupInvite(identity: ParticipantIdentity, inviteId: string, code: string) {
+  if (shouldUsePreviewData(identity)) return confirmPreviewGroupInvite(identity, inviteId, code);
+  return request<ConfirmGroupInviteResult>(
+    `/group/invite/${encodeURIComponent(inviteId)}/confirm`,
+    { method: 'POST', body: JSON.stringify({ code: code.trim() }) },
     identity.accessToken,
   );
 }

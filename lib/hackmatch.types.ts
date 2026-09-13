@@ -1,6 +1,7 @@
 export type Availability = 'full_hackathon' | 'partial' | 'remote_only';
 export type ChannelType = 'admin' | 'find_team' | 'my_group';
 export type InviteStatus = 'none' | 'pending' | 'sent' | 'accepted' | 'declined';
+export type GroupInviteStatus = 'pending' | 'confirmed' | 'declined';
 export type AppRole = 'admin' | 'participant';
 export type TeamStatus = 'available' | 'forming' | 'finalized';
 export type ProfileQuestionType = 'short_text' | 'long_text' | 'multi_select' | 'single_select';
@@ -90,9 +91,17 @@ export interface GroupInvite {
   from_name?: string;
   to_name?: string;
   note?: string | null;
-  status?: InviteStatus;
+  status?: InviteStatus | GroupInviteStatus;
   direction?: 'incoming' | 'outgoing';
   created_at?: string;
+  confirmation_required?: boolean;
+  expires_at?: string;
+  direct_conversation_id?: string;
+}
+export interface ConfirmGroupInviteResult {
+  status: 'confirmed';
+  group_id: string;
+  channel?: Channel;
 }
 export interface TeamRequest extends GroupInvite {
   from_user_id: string;
