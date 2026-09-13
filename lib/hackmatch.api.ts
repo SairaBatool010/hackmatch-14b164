@@ -174,11 +174,19 @@ export const DEFAULT_PROFILE_SCHEMA: ProfileFormSchema = {
   ],
 };
 
+export interface ApiRequestDetails {
+  method: string;
+  url: string;
+  body?: string;
+  hasAuthorization: boolean;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
     public data?: unknown,
+    public requestDetails?: ApiRequestDetails,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -196,7 +204,24 @@ async function request<T>(
   const headers = new Headers({ Accept: 'application/json', 'Content-Type': 'application/json' });
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
   new Headers(options.headers).forEach((value, key) => headers.set(key, value));
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const url = `${API_BASE_URL}${path}`;
+  const requestDetails: ApiRequestDetails = {
+    method: options.method ?? 'GET',
+    url,
+    body: typeof options.body === 'string' ? options.body : undefined,
+    hasAuthorization: Boolean(accessToken),
+  };
+  let response: Response;
+  try {
+    response = await fetch(url, { ...options, headers });
+  } catch (caught) {
+    throw new ApiError(
+      caught instanceof Error ? caught.message : 'The backend could not be reached.',
+      0,
+      null,
+      requestDetails,
+    );
+  }
   const raw = await response.text();
   let data: unknown = null;
   if (raw) {
@@ -213,7 +238,7 @@ async function request<T>(
         : typeof data === 'object' && data && 'error' in data
           ? String(data.error)
           : 'Something went wrong. Please try again.';
-    throw new ApiError(message, response.status, data);
+    throw new ApiError(message, response.status, data, requestDetails);
   }
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return data as T;

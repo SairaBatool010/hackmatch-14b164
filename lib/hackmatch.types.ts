@@ -42,6 +42,7 @@ export interface Profile extends ProfileValues {
   email: string;
   group_id?: string | null;
   team_status?: TeamStatus;
+  member_count?: number;
 }
 export interface RecommenderGroup {
   id: string;

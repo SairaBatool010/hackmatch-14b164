@@ -6,7 +6,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import { AppShell } from '@/components/AppShell';
 import { ProfileDetails } from '@/components/ProfileDetails';
 import { useProfileFormSchema } from '@/hooks/useProfileFormSchema';
-import { getParticipantProfile } from '@/lib/hackmatch.api';
+import { getGroupMembers, getParticipantProfile } from '@/lib/hackmatch.api';
 import { useHackmatchStore } from '@/lib/hackmatch.store';
 import type { Profile } from '@/lib/hackmatch.types';
 import { goBackOrReplace } from '@/lib/navigation';
@@ -22,13 +22,24 @@ export default function MemberProfile() {
     ownProfile?.user_id === id ? ownProfile : null,
   );
   const [loading, setLoading] = useState(!profile);
+  const [teamMemberCount, setTeamMemberCount] = useState<number | undefined>(profile?.member_count);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     try {
-      setProfile(await getParticipantProfile(identity, id));
+      const participant = await getParticipantProfile(identity, id);
+      setProfile(participant);
+      setTeamMemberCount(participant.member_count);
+      if (participant.group_id && participant.member_count === undefined) {
+        try {
+          const members = await getGroupMembers(identity, participant.group_id);
+          setTeamMemberCount(members.length);
+        } catch {
+          setTeamMemberCount(undefined);
+        }
+      }
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'This profile could not be loaded.');
@@ -38,11 +49,9 @@ export default function MemberProfile() {
   }, [id, identity]);
 
   useEffect(() => {
-    const initialLoad = profile ? null : setTimeout(() => void load(), 0);
-    return () => {
-      if (initialLoad !== null) clearTimeout(initialLoad);
-    };
-  }, [load, profile]);
+    const initialLoad = setTimeout(() => void load(), 0);
+    return () => clearTimeout(initialLoad);
+  }, [load]);
   if (!identity && role !== 'admin') return <Redirect href="/invite" />;
 
   return (
@@ -71,6 +80,7 @@ export default function MemberProfile() {
           profile={profile}
           schema={schema}
           canRequest={Boolean(identity && identity.userId !== profile.user_id)}
+          teamMemberCount={teamMemberCount}
         />
       ) : null}
     </AppShell>

@@ -1,6 +1,6 @@
 import { View } from 'react-native';
 import { Card, Chip, Typography } from 'heroui-native';
-import { Mail } from 'lucide-react-native';
+import { Mail, Users } from 'lucide-react-native';
 import { TeamRequestActions } from '@/components/TeamRequestActions';
 import { TeamStatusDot } from '@/components/TeamStatusDot';
 import type { Profile, ProfileFormSchema } from '@/lib/hackmatch.types';
@@ -9,10 +9,12 @@ export function ProfileDetails({
   profile,
   canRequest = false,
   schema,
+  teamMemberCount,
 }: {
   profile: Profile;
   canRequest?: boolean;
   schema?: ProfileFormSchema;
+  teamMemberCount?: number;
 }) {
   const sections = [
     ['Skills I bring', profile.skills_have],
@@ -45,6 +47,14 @@ export function ProfileDetails({
           </View>
         </View>
         <Typography.Paragraph color="muted">{profile.bio}</Typography.Paragraph>
+        {profile.group_id && teamMemberCount !== undefined ? (
+          <View className="bg-default/60 flex-row items-center gap-2 rounded-xl px-3 py-2">
+            <Users size={16} />
+            <Typography className="font-medium">
+              {teamMemberCount} {teamMemberCount === 1 ? 'member' : 'members'} in their team
+            </Typography>
+          </View>
+        ) : null}
       </Card>
       <Card className="gap-6 p-6">
         {sections.map(([title, items]) => (

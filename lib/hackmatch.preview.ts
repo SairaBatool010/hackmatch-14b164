@@ -30,6 +30,8 @@ export const PREVIEW_PARTICIPANTS: Profile[] = SEEDS.map(([name, skill, second],
   roles_wanted: [skill],
   availability: index % 3 === 0 ? 'partial' : 'full_hackathon',
   team_status: index % 4 === 3 ? 'finalized' : index % 3 === 2 ? 'forming' : 'available',
+  group_id: index % 4 === 3 || index % 3 === 2 ? `preview-team-${index + 1}` : null,
+  member_count: index % 4 === 3 ? 5 : index % 3 === 2 ? 3 : undefined,
 }));
 export const PREVIEW_ACCOUNTS = [
   { code: '111111', profile: PREVIEW_PARTICIPANTS[0] },

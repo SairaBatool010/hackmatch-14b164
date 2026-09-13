@@ -5,7 +5,7 @@ import { Button, Card, Input, Spinner, Typography } from 'heroui-native';
 import { ArrowLeft, Check, Search, UserPlus, Users } from 'lucide-react-native';
 import { AppShell } from '@/components/AppShell';
 import { ENABLE_GROUPS } from '@/lib/features';
-import { createGroup, inviteToGroup, searchParticipants } from '@/lib/hackmatch.api';
+import { ApiError, createGroup, inviteToGroup, searchParticipants } from '@/lib/hackmatch.api';
 import { useHackmatchStore } from '@/lib/hackmatch.store';
 import type { Group, ParticipantSearchResult } from '@/lib/hackmatch.types';
 import { goBackOrReplace } from '@/lib/navigation';
@@ -18,6 +18,7 @@ export default function CreateGroup() {
   const [results, setResults] = useState<ParticipantSearchResult[]>([]);
   const [busy, setBusy] = useState(false);
   const [invited, setInvited] = useState<string[]>([]);
+  const [actionError, setActionError] = useState<Error | null>(null);
   useEffect(() => {
     if (!identity || query.length < 2) return undefined;
     const t = setTimeout(() => {
@@ -34,15 +35,27 @@ export default function CreateGroup() {
     if (!name.trim()) return;
     setBusy(true);
     try {
+      setActionError(null);
       setGroup(await createGroup(identity, name.trim()));
+    } catch (caught) {
+      setActionError(
+        caught instanceof Error ? caught : new Error('The team could not be created.'),
+      );
     } finally {
       setBusy(false);
     }
   };
   const invite = async (p: ParticipantSearchResult) => {
     if (!group) return;
-    await inviteToGroup(identity, group.id, p.id);
-    setInvited([...invited, p.id]);
+    try {
+      setActionError(null);
+      await inviteToGroup(identity, group.id, p.id);
+      setInvited((current) => [...current, p.id]);
+    } catch (caught) {
+      setActionError(
+        caught instanceof Error ? caught : new Error('The invitation could not be sent.'),
+      );
+    }
   };
   return (
     <AppShell
@@ -55,6 +68,39 @@ export default function CreateGroup() {
         </Button>
       }
     >
+      {actionError ? (
+        <Card className="bg-danger-soft mb-5 gap-2 p-4">
+          <Typography className="font-semibold">Backend request failed</Typography>
+          <Typography>{actionError.message}</Typography>
+          {actionError instanceof ApiError && actionError.requestDetails ? (
+            <View className="gap-1">
+              <Typography className="text-xs">
+                Request: {actionError.requestDetails.method} {actionError.requestDetails.url}
+              </Typography>
+              <Typography className="text-xs">
+                Authorization:{' '}
+                {actionError.requestDetails.hasAuthorization
+                  ? 'Bearer token sent'
+                  : 'No token sent'}
+              </Typography>
+              <Typography className="text-xs">
+                Body: {actionError.requestDetails.body ?? '(none)'}
+              </Typography>
+              <Typography className="text-xs">
+                HTTP status: {actionError.status || 'No response'}
+              </Typography>
+              <Typography className="text-xs">
+                Response:{' '}
+                {actionError.data === null || actionError.data === undefined
+                  ? '(empty)'
+                  : typeof actionError.data === 'string'
+                    ? actionError.data
+                    : JSON.stringify(actionError.data, null, 2)}
+              </Typography>
+            </View>
+          ) : null}
+        </Card>
+      ) : null}
       {!group ? (
         <Card className="items-center gap-5 px-6 py-12">
           <Users size={30} />

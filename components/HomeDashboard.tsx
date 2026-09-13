@@ -54,7 +54,7 @@ export function HomeDashboard() {
           </View>
           <Typography.Heading className="text-xl">HackMatch</Typography.Heading>
         </View>
-        <View className="flex-row items-center gap-1">
+        <View className="items-end gap-1">
           <Button size="sm" variant="ghost" onPress={() => router.push('/profile/edit')}>
             <UserRoundPen size={16} />
             <Button.Label>Edit profile</Button.Label>
