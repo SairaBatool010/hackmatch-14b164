@@ -9,11 +9,11 @@ import type {
 
 const SEEDS = [
   ['Maya Chen', 'Product design', 'React Native'],
-  ['Leo Martins', 'Mobile development', 'Expo'],
+  ['Grace Liu', 'Data visualization', 'SQL'],
   ['Amara Okafor', 'Backend development', 'PostgreSQL'],
   ['Aisha Rahman', 'Machine learning', 'Python'],
   ['Daniel Kim', 'Security', 'OAuth'],
-  ['Grace Liu', 'Data visualization', 'SQL'],
+  ['Leo Martins', 'Mobile development', 'Expo'],
   ['Camila Santos', 'React Native', 'Mobile UX'],
   ['Alejandro Ruiz', 'Node.js', 'REST APIs'],
   ['Anika Sharma', 'Figma', 'UX research'],
@@ -152,8 +152,15 @@ export async function respondToPreviewTeamRequest(inviteId: string, accept: bool
   return { status: accept ? 'accepted' : 'declined' };
 }
 
-export async function getPreviewInviteMessages(inviteId: string): Promise<ChannelMessage[]> {
-  const value = await AsyncStorage.getItem(`${MESSAGE_KEY_PREFIX}${inviteId}`);
+async function previewConversationKey(inviteId: string): Promise<string> {
+  const requests = await readPreviewRequests();
+  const request = requests.find((item) => item.id === inviteId);
+  if (!request) return inviteId;
+  return [request.from_user_id, request.to_user_id].sort().join(':');
+}
+
+async function readPreviewMessages(key: string): Promise<ChannelMessage[]> {
+  const value = await AsyncStorage.getItem(`${MESSAGE_KEY_PREFIX}${key}`);
   if (!value) return [];
   try {
     const parsed: unknown = JSON.parse(value);
@@ -163,22 +170,30 @@ export async function getPreviewInviteMessages(inviteId: string): Promise<Channe
   }
 }
 
+export async function getPreviewInviteMessages(inviteId: string): Promise<ChannelMessage[]> {
+  const conversationKey = await previewConversationKey(inviteId);
+  const messages = await readPreviewMessages(conversationKey);
+  if (messages.length || conversationKey === inviteId) return messages;
+  return readPreviewMessages(inviteId);
+}
+
 export async function postPreviewInviteMessage(
   identity: ParticipantIdentity,
   inviteId: string,
   body: string,
 ): Promise<ChannelMessage> {
   const messages = await getPreviewInviteMessages(inviteId);
+  const conversationKey = await previewConversationKey(inviteId);
   const message: ChannelMessage = {
     id: `preview-message-${Date.now()}`,
-    channel_id: inviteId,
+    channel_id: conversationKey,
     user_id: identity.userId,
     author_name: identity.name,
     body: body.trim(),
     created_at: new Date().toISOString(),
   };
   await AsyncStorage.setItem(
-    `${MESSAGE_KEY_PREFIX}${inviteId}`,
+    `${MESSAGE_KEY_PREFIX}${conversationKey}`,
     JSON.stringify([...messages, message]),
   );
   return message;

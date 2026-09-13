@@ -41,6 +41,26 @@ function Content() {
       void load();
     }, [load]),
   );
+  const directConversations = Array.from(
+    requests
+      .reduce((conversations, request) => {
+        const outgoing = request.from_user_id === identity?.userId;
+        const participantId = outgoing ? request.to_user_id : request.from_user_id;
+        const personName = outgoing
+          ? (request.to_name ?? 'Participant')
+          : (request.from_name ?? 'Participant');
+        const existing = conversations.get(participantId);
+        const requestTime = request.created_at ? Date.parse(request.created_at) : 0;
+        const existingTime = existing?.request.created_at
+          ? Date.parse(existing.request.created_at)
+          : 0;
+        if (!existing || requestTime >= existingTime) {
+          conversations.set(participantId, { request, personName });
+        }
+        return conversations;
+      }, new Map<string, { request: TeamRequest; personName: string }>())
+      .values(),
+  );
   if (loading)
     return (
       <View className="flex-1 items-center justify-center">
@@ -49,9 +69,9 @@ function Content() {
     );
   return (
     <AppShell
-      eyebrow="Private conversations"
+      eyebrow="Conversations"
       title="DMs"
-      description="Your team and team-up request conversations live here."
+      description="One direct conversation per person, plus your team chats."
       action={
         <Button size="sm" onPress={() => router.push('/group/create')}>
           <Plus size={17} />
@@ -64,40 +84,30 @@ function Content() {
           <Typography>{error}</Typography>
         </Card>
       ) : null}
-      {teams.length || requests.length ? (
+      {teams.length || directConversations.length ? (
         <View className="gap-6">
-          {requests.length ? (
+          {directConversations.length ? (
             <View className="gap-3">
-              <Typography.Heading className="text-lg">Team-up conversations</Typography.Heading>
-              {requests.map((request) => {
-                const outgoing = request.from_user_id === identity?.userId;
-                const personName = outgoing
-                  ? (request.to_name ?? 'Participant')
-                  : (request.from_name ?? 'Participant');
-                const status =
-                  request.status === 'accepted'
-                    ? 'Accepted'
-                    : request.status === 'declined'
-                      ? 'Declined'
-                      : outgoing
-                        ? 'Request sent'
-                        : 'Request received';
-                return (
-                  <Button
-                    key={request.id}
-                    variant="secondary"
-                    className="h-auto justify-start p-4"
-                    onPress={() => router.push(requestThreadHref(request.id, personName))}
-                  >
-                    <MessageCircle size={21} />
-                    <View className="flex-1 items-start">
-                      <Button.Label>{personName}</Button.Label>
-                      <Typography.Paragraph color="muted">{status}</Typography.Paragraph>
-                    </View>
-                    <ChevronRight size={18} />
-                  </Button>
-                );
-              })}
+              <Typography.Heading className="text-lg">Direct messages</Typography.Heading>
+              {directConversations.map(({ request, personName }) => (
+                <Button
+                  key={
+                    request.from_user_id === identity?.userId
+                      ? request.to_user_id
+                      : request.from_user_id
+                  }
+                  variant="secondary"
+                  className="h-auto justify-start p-4"
+                  onPress={() => router.push(requestThreadHref(request.id, personName))}
+                >
+                  <MessageCircle size={21} />
+                  <View className="flex-1 items-start">
+                    <Button.Label>{personName}</Button.Label>
+                    <Typography.Paragraph color="muted">Direct message</Typography.Paragraph>
+                  </View>
+                  <ChevronRight size={18} />
+                </Button>
+              ))}
             </View>
           ) : null}
           {teams.length ? (
@@ -126,7 +136,7 @@ function Content() {
           <MessageCircle size={28} />
           <Typography.Heading className="text-lg">No conversations yet</Typography.Heading>
           <Typography.Paragraph color="muted" className="text-center">
-            Team-up requests and team chats will appear here.
+            Direct messages and team chats will appear here.
           </Typography.Paragraph>
           <Button onPress={() => router.push('/find-team')}>
             <Button.Label>Find teammates</Button.Label>

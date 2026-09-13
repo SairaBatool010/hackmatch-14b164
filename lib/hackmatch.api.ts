@@ -114,7 +114,7 @@ const MESSAGES: Record<string, ChannelMessage[]> = {
       id: 't1',
       channel_id: 'preview-team-builders',
       user_id: 'preview-user-2',
-      author_name: 'Leo Martins',
+      author_name: 'Grace Liu',
       body: 'What should we prioritize for the prototype?',
       created_at: new Date().toISOString(),
     },

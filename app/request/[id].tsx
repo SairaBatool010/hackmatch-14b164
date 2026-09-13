@@ -87,14 +87,12 @@ export default function RequestThread() {
       >
         <View className="border-border bg-surface web:max-w-5xl mx-auto flex-1 border-x">
           <View className="border-border flex-row items-center gap-3 border-b p-3">
-            <Button isIconOnly variant="ghost" onPress={() => goBackOrReplace('/(tabs)/activity')}>
+            <Button isIconOnly variant="ghost" onPress={() => goBackOrReplace('/(tabs)/dms')}>
               <ArrowLeft size={21} />
             </Button>
             <View className="flex-1">
               <Typography.Heading className="text-lg">{name}</Typography.Heading>
-              <Typography.Paragraph color="muted">
-                This conversation remains available after the request is answered.
-              </Typography.Paragraph>
+              <Typography.Paragraph color="muted">Direct conversation</Typography.Paragraph>
             </View>
           </View>
           {error ? (

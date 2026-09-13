@@ -33,7 +33,7 @@ export default function InviteScreen() {
     if (!/^\d{6}$/.test(code) || (preview && !previewAccount)) {
       setError(
         preview
-          ? 'Enter the code for Maya or Leo shown above.'
+          ? 'Enter the code for Maya or Grace shown above.'
           : 'Enter your 6-digit confirmation code.',
       );
       return;
@@ -105,7 +105,7 @@ export default function InviteScreen() {
               />
               <Description>
                 {preview
-                  ? 'Use 111111 for Maya or 222222 for Leo. Switch accounts from Change role on Home.'
+                  ? 'Use 111111 for Maya or 222222 for Grace. Switch accounts from Change role on Home.'
                   : 'Use the code from your invitation.'}
               </Description>
               <FieldError>{error}</FieldError>
