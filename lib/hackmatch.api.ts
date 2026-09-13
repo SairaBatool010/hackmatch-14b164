@@ -33,6 +33,16 @@ import type {
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
 const USE_PREVIEW_DATA = __DEV__;
 const GROUP_ID = 'preview-group-builders';
+
+function shouldUsePreviewData(identity?: ParticipantIdentity | null) {
+  return (
+    USE_PREVIEW_DATA ||
+    Boolean(
+      identity &&
+      PREVIEW_PARTICIPANTS.some((participant) => participant.user_id === identity.userId),
+    )
+  );
+}
 const CHANNELS: Channel[] = [
   {
     id: 'preview-announcements',
@@ -287,7 +297,7 @@ export function updateProfile(identity: ParticipantIdentity, values: ProfileValu
   );
 }
 export async function getChannels(identity: ParticipantIdentity) {
-  if (USE_PREVIEW_DATA) return CHANNELS;
+  if (shouldUsePreviewData(identity)) return CHANNELS;
   const result = await request<Channel[] | { data?: Channel[]; channels?: Channel[] }>(
     `/channels?user_id=${encodeURIComponent(identity.userId)}`,
     {},
@@ -346,7 +356,7 @@ export async function getRecommendations(
   profile?: Profile | null,
   groups: RecommenderGroup[] = [],
 ) {
-  if (USE_PREVIEW_DATA) {
+  if (shouldUsePreviewData(identity)) {
     if (!profile) throw new ApiError('Complete your profile before requesting matches.', 400);
     const profiles = [
       profile,
@@ -365,7 +375,16 @@ export async function getRecommendations(
           },
         },
       );
-      if (!error && data?.recommendations) return data.recommendations;
+      if (!error && data?.recommendations) {
+        const profilesByUserId = new Map(
+          profiles.map((candidate) => [candidate.user_id, candidate] as const),
+        );
+        return data.recommendations.map((recommendation) => ({
+          ...recommendation,
+          team_status:
+            profilesByUserId.get(recommendation.user_id)?.team_status ?? recommendation.team_status,
+        }));
+      }
     } catch {
       // Preview matching remains available if the optional recommender function is unavailable.
     }
@@ -382,7 +401,8 @@ export async function sendTeamInvite(
   note: string | null = null,
 ): Promise<TeamRequest> {
   const normalizedNote = note?.trim() || null;
-  if (USE_PREVIEW_DATA) return createPreviewTeamRequest(identity, toUserId, normalizedNote);
+  if (shouldUsePreviewData(identity))
+    return createPreviewTeamRequest(identity, toUserId, normalizedNote);
   const result = await request<
     | TeamRequest
     | { invite: TeamRequest }
@@ -418,7 +438,7 @@ export async function sendTeamInvite(
   };
 }
 export async function getTeamRequests(identity: ParticipantIdentity) {
-  if (USE_PREVIEW_DATA) return getPreviewTeamRequests(identity);
+  if (shouldUsePreviewData(identity)) return getPreviewTeamRequests(identity);
   const result = await request<
     TeamRequest[] | { data?: TeamRequest[]; invitations?: TeamRequest[]; requests?: TeamRequest[] }
   >(`/invites?user_id=${encodeURIComponent(identity.userId)}`, {}, identity.accessToken);
@@ -431,7 +451,7 @@ export function respondToTeamRequest(
   inviteId: string,
   accept: boolean,
 ) {
-  if (USE_PREVIEW_DATA) return respondToPreviewTeamRequest(inviteId, accept);
+  if (shouldUsePreviewData(identity)) return respondToPreviewTeamRequest(inviteId, accept);
   return request<{ status: string }>(
     `/invite/${encodeURIComponent(inviteId)}/respond`,
     { method: 'POST', body: JSON.stringify({ accept }) },
@@ -439,14 +459,14 @@ export function respondToTeamRequest(
   );
 }
 export async function getInviteMessages(identity: ParticipantIdentity, inviteId: string) {
-  if (USE_PREVIEW_DATA) return getPreviewInviteMessages(inviteId);
+  if (shouldUsePreviewData(identity)) return getPreviewInviteMessages(inviteId);
   const result = await request<
     ChannelMessage[] | { data?: ChannelMessage[]; messages?: ChannelMessage[] }
   >(`/invite/${encodeURIComponent(inviteId)}/messages`, {}, identity.accessToken);
   return Array.isArray(result) ? result : asArray(result.messages ?? result.data);
 }
 export function postInviteMessage(identity: ParticipantIdentity, inviteId: string, body: string) {
-  if (USE_PREVIEW_DATA) return postPreviewInviteMessage(identity, inviteId, body);
+  if (shouldUsePreviewData(identity)) return postPreviewInviteMessage(identity, inviteId, body);
   return request<ChannelMessage>(
     `/invite/${encodeURIComponent(inviteId)}/messages`,
     { method: 'POST', body: JSON.stringify({ user_id: identity.userId, body }) },
@@ -461,7 +481,7 @@ export function createGroup(identity: ParticipantIdentity, name: string) {
   );
 }
 export async function searchParticipants(identity: ParticipantIdentity, query: string) {
-  if (USE_PREVIEW_DATA) return searchPreviewParticipants(query, identity.userId);
+  if (shouldUsePreviewData(identity)) return searchPreviewParticipants(query, identity.userId);
   const result = await request<
     | ParticipantSearchResult[]
     | { data?: ParticipantSearchResult[]; users?: ParticipantSearchResult[] }
@@ -476,6 +496,7 @@ export function inviteToGroup(identity: ParticipantIdentity, groupId: string, to
   );
 }
 export async function getGroupInvites(identity: ParticipantIdentity) {
+  if (shouldUsePreviewData(identity)) return [];
   const result = await request<
     GroupInvite[] | { data?: GroupInvite[]; invitations?: GroupInvite[] }
   >(`/group/invites?user_id=${encodeURIComponent(identity.userId)}`, {}, identity.accessToken);
@@ -537,14 +558,14 @@ export function createAdminChannel(values: CreateChannelValues) {
   });
 }
 export async function getChannelMessages(identity: ParticipantIdentity, channelId: string) {
-  if (USE_PREVIEW_DATA) return [...(MESSAGES[channelId] ?? [])];
+  if (shouldUsePreviewData(identity)) return [...(MESSAGES[channelId] ?? [])];
   const result = await request<
     ChannelMessage[] | { data?: ChannelMessage[]; messages?: ChannelMessage[] }
   >(`/channels/${encodeURIComponent(channelId)}/messages`, {}, identity.accessToken);
   return Array.isArray(result) ? result : asArray(result.messages ?? result.data);
 }
 export function postChannelMessage(identity: ParticipantIdentity, channelId: string, body: string) {
-  if (USE_PREVIEW_DATA) {
+  if (shouldUsePreviewData(identity)) {
     const message = {
       id: `preview-${Date.now()}`,
       channel_id: channelId,
@@ -563,7 +584,7 @@ export function postChannelMessage(identity: ParticipantIdentity, channelId: str
   );
 }
 export function getParticipantProfile(identity: ParticipantIdentity | null, userId: string) {
-  if (USE_PREVIEW_DATA) {
+  if (shouldUsePreviewData(identity)) {
     const preview = PREVIEW_PARTICIPANTS.find((participant) => participant.user_id === userId);
     if (preview) return Promise.resolve(preview);
   }
@@ -573,7 +594,7 @@ export async function getChannelMembers(
   identity: ParticipantIdentity,
   channelId: string,
 ): Promise<GroupMember[]> {
-  if (USE_PREVIEW_DATA) {
+  if (shouldUsePreviewData(identity)) {
     return PREVIEW_PARTICIPANTS.map((participant) => ({
       user_id: participant.user_id,
       name: participant.name,
@@ -593,7 +614,7 @@ export async function getGroupMembers(
   identity: ParticipantIdentity | null,
   groupId: string,
 ): Promise<GroupMember[]> {
-  if (USE_PREVIEW_DATA && groupId === GROUP_ID && identity)
+  if (shouldUsePreviewData(identity) && groupId === GROUP_ID && identity)
     return [
       {
         user_id: identity.userId,

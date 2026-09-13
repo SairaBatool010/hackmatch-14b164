@@ -152,23 +152,32 @@ function Content() {
       {items.length ? (
         <View className="gap-3">
           {items.map((item) => {
-            const outgoingDecline = item.direction === 'outgoing' && item.status === 'declined';
+            const outgoingRequest = item.kind === 'request' && item.direction === 'outgoing';
+            const outgoingDecline = outgoingRequest && item.status === 'declined';
+            const outgoingAccepted = outgoingRequest && item.status === 'accepted';
             const pendingIncoming =
               item.direction !== 'outgoing' && (!item.status || item.status === 'pending');
             const title = outgoingDecline
               ? 'Request declined'
-              : item.kind === 'request'
-                ? 'Team-up request'
-                : 'Team invitation';
+              : outgoingAccepted
+                ? 'Request accepted'
+                : outgoingRequest
+                  ? 'Request sent'
+                  : item.kind === 'request'
+                    ? 'Team-up request'
+                    : 'Team invitation';
+            const description = outgoingRequest
+              ? outgoingDecline
+                ? `Your request to ${item.to_name ?? 'this participant'} was declined. Keep looking for a match.`
+                : outgoingAccepted
+                  ? `${item.to_name ?? 'This participant'} accepted your team-up request.`
+                  : `You sent a team-up request to ${item.to_name ?? 'this participant'}.`
+              : `${item.from_name ?? 'A participant'} wants to team up${item.group_name ? ` in ${item.group_name}` : ''}.`;
             return (
               <Card key={`${item.kind}-${item.id}`} className="gap-4 p-5">
                 <Bell size={21} />
                 <Typography.Heading>{title}</Typography.Heading>
-                <Typography.Paragraph color="muted">
-                  {outgoingDecline
-                    ? `Your request to ${item.to_name ?? 'this participant'} was declined. Keep looking for a match.`
-                    : `${item.from_name ?? 'A participant'} wants to team up${item.group_name ? ` in ${item.group_name}` : ''}.`}
-                </Typography.Paragraph>
+                <Typography.Paragraph color="muted">{description}</Typography.Paragraph>
                 {item.note ? (
                   <Card className="bg-surface-secondary p-3">
                     <Typography>{item.note}</Typography>
