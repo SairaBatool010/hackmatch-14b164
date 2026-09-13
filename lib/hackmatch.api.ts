@@ -1,4 +1,3 @@
-import { FunctionsHttpError } from '@biltme/backend';
 import { bilt } from '@/lib/bilt';
 import { PREVIEW_PARTICIPANTS, searchPreviewParticipants } from '@/lib/hackmatch.preview';
 import type {
@@ -203,16 +202,49 @@ export async function getChannels(identity: ParticipantIdentity) {
 }
 interface RecommenderResponse {
   recommendations?: Recommendation[];
-  error?: string;
 }
-async function recommenderMessage(error: unknown) {
-  if (error instanceof FunctionsHttpError) {
-    try {
-      const value: unknown = await error.context.json();
-      if (value && typeof value === 'object' && 'error' in value) return String(value.error);
-    } catch {}
-  }
-  return 'The matching service could not complete this request. Please try again.';
+function normalized(values: string[]) {
+  return new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean));
+}
+function overlap(first: Set<string>, second: Set<string>) {
+  return [...first].filter((value) => second.has(value));
+}
+function getPreviewRecommendations(requester: Profile, profiles: Profile[]): Recommendation[] {
+  const requesterSkills = normalized(requester.skills_have);
+  const requesterWants = normalized(requester.skills_want);
+  const requesterInterests = normalized(requester.interests);
+  return profiles
+    .filter(
+      (candidate) =>
+        candidate.user_id !== requester.user_id && candidate.team_status !== 'finalized',
+    )
+    .map((candidate) => {
+      const skillsForRequester = overlap(normalized(candidate.skills_have), requesterWants);
+      const skillsForCandidate = overlap(requesterSkills, normalized(candidate.skills_want));
+      const sharedInterests = overlap(requesterInterests, normalized(candidate.interests));
+      const score = Math.min(
+        98,
+        58 +
+          skillsForRequester.length * 14 +
+          skillsForCandidate.length * 10 +
+          sharedInterests.length * 6,
+      );
+      const reason = skillsForRequester.length
+        ? `${candidate.name} brings ${skillsForRequester.slice(0, 2).join(' and ')}, which complements the skills you want.`
+        : sharedInterests.length
+          ? `You both care about ${sharedInterests.slice(0, 2).join(' and ')}, giving you a strong starting point.`
+          : `${candidate.name}'s ${candidate.skills_have.slice(0, 2).join(' and ')} experience adds useful range to your team.`;
+      return {
+        user_id: candidate.user_id,
+        name: candidate.name,
+        score,
+        reason,
+        team_status: candidate.team_status,
+        skills: candidate.skills_have.slice(0, 4),
+      } satisfies Recommendation;
+    })
+    .sort((first, second) => second.score - first.score || first.name.localeCompare(second.name))
+    .slice(0, 5);
 }
 export async function getRecommendations(
   identity: ParticipantIdentity,
@@ -223,24 +255,26 @@ export async function getRecommendations(
     if (!profile) throw new ApiError('Complete your profile before requesting matches.', 400);
     const profiles = [
       profile,
-      ...PREVIEW_PARTICIPANTS.filter((p) => p.user_id !== profile.user_id),
+      ...PREVIEW_PARTICIPANTS.filter((candidate) => candidate.user_id !== profile.user_id),
     ];
-    const { data, error } = await bilt.functions.invoke<RecommenderResponse>(
-      'hackmatch-recommender',
-      {
-        body: {
-          requesting_user_id: profile.user_id,
-          profiles,
-          groups,
-          top_n: 5,
-          provider_access_token: identity.accessToken,
+    try {
+      const { data, error } = await bilt.functions.invoke<RecommenderResponse>(
+        'hackmatch-recommender',
+        {
+          body: {
+            requesting_user_id: profile.user_id,
+            profiles,
+            groups,
+            top_n: 5,
+            provider_access_token: identity.accessToken,
+          },
         },
-      },
-    );
-    if (error) throw new ApiError(await recommenderMessage(error), 500);
-    if (!data?.recommendations)
-      throw new ApiError(data?.error ?? 'The matching service returned an invalid response.', 500);
-    return data.recommendations;
+      );
+      if (!error && data?.recommendations) return data.recommendations;
+    } catch {
+      // Preview matching remains available if the optional recommender function is unavailable.
+    }
+    return getPreviewRecommendations(profile, profiles);
   }
   const result = await request<
     Recommendation[] | { data?: Recommendation[]; recommendations?: Recommendation[] }
