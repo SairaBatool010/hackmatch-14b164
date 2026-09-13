@@ -95,7 +95,7 @@ export default function Channel() {
               <ArrowLeft size={21} />
             </Button>
             <View className="flex-1">
-              <Typography.Heading>{name}</Typography.Heading>
+              <Typography.Heading className="text-lg">{name}</Typography.Heading>
               <Typography.Paragraph color="muted">{params.description}</Typography.Paragraph>
             </View>
             <Button

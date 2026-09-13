@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Avatar, Button, Card, PressableFeedback, Spinner, Typography } from 'heroui-native';
-import { ChevronRight, Hash, Plus, Sparkles } from 'lucide-react-native';
+import { ChevronRight, Hash, LogOut, Plus, Sparkles } from 'lucide-react-native';
 import { AppShell } from '@/components/AppShell';
 import { ENABLE_GROUPS } from '@/lib/features';
 import { getChannels } from '@/lib/hackmatch.api';
@@ -12,6 +12,8 @@ import { channelHref } from '@/lib/navigation';
 export function HomeDashboard() {
   const router = useRouter();
   const identity = useHackmatchStore((s) => s.identity);
+  const clearSession = useHackmatchStore((s) => s.clearSession);
+  const setAppRole = useHackmatchStore((s) => s.setAppRole);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +40,11 @@ export function HomeDashboard() {
       </View>
     );
   const open = (c: Channel) => router.push(c.type === 'find_team' ? '/find-team' : channelHref(c));
+  const changeRole = () => {
+    clearSession();
+    setAppRole(null);
+    router.replace('/role');
+  };
   const initials =
     identity?.name
       .split(/\s+/)
@@ -53,11 +60,17 @@ export function HomeDashboard() {
           </View>
           <Typography.Heading className="text-xl">HackMatch</Typography.Heading>
         </View>
-        <PressableFeedback onPress={() => router.push('/profile')}>
-          <Avatar alt="Profile">
-            <Avatar.Fallback>{initials}</Avatar.Fallback>
-          </Avatar>
-        </PressableFeedback>
+        <View className="flex-row items-center gap-1">
+          <Button size="sm" variant="ghost" onPress={changeRole}>
+            <LogOut size={16} />
+            <Button.Label>Change role</Button.Label>
+          </Button>
+          <PressableFeedback onPress={() => router.push('/profile')}>
+            <Avatar alt="Profile">
+              <Avatar.Fallback>{initials}</Avatar.Fallback>
+            </Avatar>
+          </PressableFeedback>
+        </View>
       </View>
       <Typography.Heading className="text-4xl">
         Hi, {identity?.name.split(' ')[0]}
@@ -90,7 +103,7 @@ export function HomeDashboard() {
         </Card>
         <View className="min-w-0 flex-1 gap-4">
           <Card className="border-accent/20 gap-4 border p-6">
-            <Typography.Heading>Find your team</Typography.Heading>
+            <Typography.Heading className="text-xl">Find your team</Typography.Heading>
             <Typography.Paragraph color="muted">
               Discover people whose skills complement yours.
             </Typography.Paragraph>
@@ -101,7 +114,7 @@ export function HomeDashboard() {
           {ENABLE_GROUPS ? (
             <Card className="gap-4 p-6">
               <Plus size={22} />
-              <Typography.Heading>Create a team</Typography.Heading>
+              <Typography.Heading className="text-xl">Create a team</Typography.Heading>
               <Button variant="secondary" onPress={() => router.push('/group/create')}>
                 <Button.Label>Create your group</Button.Label>
               </Button>

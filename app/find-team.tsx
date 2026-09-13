@@ -1,15 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Button, Card, Chip, SearchField, Spinner, Typography } from 'heroui-native';
+import {
+  Button,
+  Card,
+  Chip,
+  PressableFeedback,
+  SearchField,
+  Spinner,
+  Typography,
+} from 'heroui-native';
 import { ArrowLeft, Pencil, Sparkles, UserRoundSearch } from 'lucide-react-native';
 import { AppShell } from '@/components/AppShell';
 import { TeamRequestActions } from '@/components/TeamRequestActions';
-import { TeamStatusDot } from '@/components/TeamStatusDot';
+import { getTeamStatusLabel, TeamStatusDot } from '@/components/TeamStatusDot';
 import { getRecommendations } from '@/lib/hackmatch.api';
 import { useHackmatchStore } from '@/lib/hackmatch.store';
 import type { Recommendation } from '@/lib/hackmatch.types';
-import { goBackOrReplace } from '@/lib/navigation';
+import { goBackOrReplace, memberProfileHref } from '@/lib/navigation';
 export default function FindTeam() {
   const router = useRouter();
   const identity = useHackmatchStore((s) => s.identity);
@@ -85,14 +93,26 @@ export default function FindTeam() {
               {visible.map((m) => {
                 return (
                   <Card key={m.user_id} className="gap-4 p-5 md:w-[48%]">
-                    <View className="flex-row items-center gap-3">
-                      <View className="bg-accent-soft relative h-10 w-10 items-center justify-center rounded-full">
-                        <Typography>{m.name[0]}</Typography>
-                        <TeamStatusDot status={m.team_status} />
+                    <PressableFeedback onPress={() => router.push(memberProfileHref(m.user_id))}>
+                      <View className="gap-2">
+                        <View className="flex-row items-center gap-3">
+                          <View className="bg-accent-soft relative h-10 w-10 items-center justify-center rounded-full">
+                            <Typography>{m.name[0]}</Typography>
+                            <TeamStatusDot status={m.team_status} />
+                          </View>
+                          <Typography.Heading className="flex-1 text-lg">
+                            {m.name}
+                          </Typography.Heading>
+                          <Sparkles size={16} />
+                        </View>
+                        <View className="flex-row items-center gap-2 pl-1">
+                          <TeamStatusDot status={m.team_status} inline />
+                          <Typography.Paragraph color="muted" className="text-xs">
+                            {getTeamStatusLabel(m.team_status)}
+                          </Typography.Paragraph>
+                        </View>
                       </View>
-                      <Typography.Heading className="flex-1">{m.name}</Typography.Heading>
-                      <Sparkles size={16} />
-                    </View>
+                    </PressableFeedback>
                     <View className="flex-row flex-wrap gap-2">
                       {m.skills.slice(0, 4).map((s) => (
                         <Chip key={s} variant="secondary">

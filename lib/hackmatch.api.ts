@@ -1,5 +1,13 @@
 import { bilt } from '@/lib/bilt';
-import { PREVIEW_PARTICIPANTS, searchPreviewParticipants } from '@/lib/hackmatch.preview';
+import {
+  createPreviewTeamRequest,
+  getPreviewInviteMessages,
+  getPreviewTeamRequests,
+  postPreviewInviteMessage,
+  PREVIEW_PARTICIPANTS,
+  respondToPreviewTeamRequest,
+  searchPreviewParticipants,
+} from '@/lib/hackmatch.preview';
 import type {
   AdminAnalytics,
   AdminTeamCounts,
@@ -374,6 +382,7 @@ export async function sendTeamInvite(
   note: string | null = null,
 ): Promise<TeamRequest> {
   const normalizedNote = note?.trim() || null;
+  if (USE_PREVIEW_DATA) return createPreviewTeamRequest(identity, toUserId, normalizedNote);
   const result = await request<
     | TeamRequest
     | { invite: TeamRequest }
@@ -409,6 +418,7 @@ export async function sendTeamInvite(
   };
 }
 export async function getTeamRequests(identity: ParticipantIdentity) {
+  if (USE_PREVIEW_DATA) return getPreviewTeamRequests(identity);
   const result = await request<
     TeamRequest[] | { data?: TeamRequest[]; invitations?: TeamRequest[]; requests?: TeamRequest[] }
   >(`/invites?user_id=${encodeURIComponent(identity.userId)}`, {}, identity.accessToken);
@@ -421,6 +431,7 @@ export function respondToTeamRequest(
   inviteId: string,
   accept: boolean,
 ) {
+  if (USE_PREVIEW_DATA) return respondToPreviewTeamRequest(inviteId, accept);
   return request<{ status: string }>(
     `/invite/${encodeURIComponent(inviteId)}/respond`,
     { method: 'POST', body: JSON.stringify({ accept }) },
@@ -428,12 +439,14 @@ export function respondToTeamRequest(
   );
 }
 export async function getInviteMessages(identity: ParticipantIdentity, inviteId: string) {
+  if (USE_PREVIEW_DATA) return getPreviewInviteMessages(inviteId);
   const result = await request<
     ChannelMessage[] | { data?: ChannelMessage[]; messages?: ChannelMessage[] }
   >(`/invite/${encodeURIComponent(inviteId)}/messages`, {}, identity.accessToken);
   return Array.isArray(result) ? result : asArray(result.messages ?? result.data);
 }
 export function postInviteMessage(identity: ParticipantIdentity, inviteId: string, body: string) {
+  if (USE_PREVIEW_DATA) return postPreviewInviteMessage(identity, inviteId, body);
   return request<ChannelMessage>(
     `/invite/${encodeURIComponent(inviteId)}/messages`,
     { method: 'POST', body: JSON.stringify({ user_id: identity.userId, body }) },

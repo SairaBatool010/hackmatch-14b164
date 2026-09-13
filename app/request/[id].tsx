@@ -91,7 +91,7 @@ export default function RequestThread() {
               <ArrowLeft size={21} />
             </Button>
             <View className="flex-1">
-              <Typography.Heading>{name}</Typography.Heading>
+              <Typography.Heading className="text-lg">{name}</Typography.Heading>
               <Typography.Paragraph color="muted">
                 This conversation remains available after the request is answered.
               </Typography.Paragraph>

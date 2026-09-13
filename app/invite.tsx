@@ -15,24 +15,8 @@ import {
 import { KeyRound, Users } from 'lucide-react-native';
 import { AppShell } from '@/components/AppShell';
 import { confirmInvitation } from '@/lib/hackmatch.api';
+import { PREVIEW_ACCOUNTS } from '@/lib/hackmatch.preview';
 import { useHackmatchStore } from '@/lib/hackmatch.store';
-const CODE = '123456';
-const IDENTITY = {
-  userId: 'preview-participant',
-  name: 'Preview Participant',
-  email: 'participant@example.com',
-};
-const PROFILE = {
-  user_id: IDENTITY.userId,
-  name: IDENTITY.name,
-  email: IDENTITY.email,
-  skills_have: ['Product design', 'React Native'],
-  skills_want: ['Backend development', 'AI'],
-  interests: ['Developer tools'],
-  bio: 'Exploring HackMatch with the participant preview.',
-  roles_wanted: ['Product builder'],
-  availability: 'full_hackathon' as const,
-};
 export default function InviteScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ token?: string; preview?: string }>();
@@ -43,8 +27,15 @@ export default function InviteScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submit = async () => {
-    if (!/^\d{6}$/.test(code) || (preview && code !== CODE)) {
-      setError('Enter the 6-digit confirmation code shown above.');
+    const previewAccount = preview
+      ? PREVIEW_ACCOUNTS.find((account) => account.code === code)
+      : undefined;
+    if (!/^\d{6}$/.test(code) || (preview && !previewAccount)) {
+      setError(
+        preview
+          ? 'Enter the code for Maya or Leo shown above.'
+          : 'Enter your 6-digit confirmation code.',
+      );
       return;
     }
     if (!preview && !params.token) {
@@ -53,9 +44,10 @@ export default function InviteScreen() {
     }
     setBusy(true);
     try {
-      if (preview) {
+      if (preview && previewAccount) {
+        const { profile } = previewAccount;
         setRole('participant');
-        setSession(IDENTITY, PROFILE);
+        setSession({ userId: profile.user_id, name: profile.name, email: profile.email }, profile);
         router.replace('/(tabs)');
         return;
       }
@@ -78,15 +70,28 @@ export default function InviteScreen() {
           </View>
           <Typography.Heading className="text-4xl">Welcome to HackMatch</Typography.Heading>
           <Card className="gap-5 p-6">
-            <View className="bg-accent-soft gap-2 rounded-xl p-4">
-              <View className="flex-row gap-2">
-                <KeyRound size={18} />
-                <Typography className="font-medium">Temporary confirmation code</Typography>
+            {preview ? (
+              <View className="gap-3">
+                <View className="flex-row items-center gap-2">
+                  <KeyRound size={18} />
+                  <Typography className="font-medium">Choose a test participant</Typography>
+                </View>
+                {PREVIEW_ACCOUNTS.map((account) => (
+                  <Button
+                    key={account.code}
+                    variant={code === account.code ? 'primary' : 'secondary'}
+                    className="h-auto justify-between py-3"
+                    onPress={() => {
+                      setCode(account.code);
+                      setError(null);
+                    }}
+                  >
+                    <Button.Label>{account.profile.name}</Button.Label>
+                    <Button.Label>{account.code}</Button.Label>
+                  </Button>
+                ))}
               </View>
-              <Typography.Heading className="text-accent text-3xl tracking-[8px]">
-                {CODE}
-              </Typography.Heading>
-            </View>
+            ) : null}
             <TextField isRequired isInvalid={Boolean(error)}>
               <Label>Confirmation code</Label>
               <Input
@@ -98,7 +103,11 @@ export default function InviteScreen() {
                 keyboardType="number-pad"
                 maxLength={6}
               />
-              <Description>Use the code shown above for preview access.</Description>
+              <Description>
+                {preview
+                  ? 'Use 111111 for Maya or 222222 for Leo. Switch accounts from Change role on Home.'
+                  : 'Use the code from your invitation.'}
+              </Description>
               <FieldError>{error}</FieldError>
             </TextField>
             <Button size="lg" isDisabled={busy || code.length !== 6} onPress={() => void submit()}>

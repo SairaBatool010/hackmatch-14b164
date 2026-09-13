@@ -5,14 +5,24 @@ const STATUS_DETAILS: Record<TeamStatus, { className: string; label: string }> =
   forming: { className: 'bg-warning', label: 'Team forming — still looking for members' },
   finalized: { className: 'bg-danger', label: 'Team finalized — no spaces available' },
 };
-export function TeamStatusDot({ status }: { status?: TeamStatus }) {
+export function TeamStatusDot({
+  status,
+  inline = false,
+}: {
+  status?: TeamStatus;
+  inline?: boolean;
+}) {
   const details = status ? STATUS_DETAILS[status] : undefined;
   if (!details) return null;
   return (
     <View
       accessible
       accessibilityLabel={details.label}
-      className={`border-surface absolute -right-0.5 -bottom-0.5 h-3.5 w-3.5 rounded-full border-2 ${details.className}`}
+      className={`${inline ? 'h-2.5 w-2.5' : 'border-surface absolute -right-0.5 -bottom-0.5 h-3.5 w-3.5 border-2'} rounded-full ${details.className}`}
     />
   );
+}
+
+export function getTeamStatusLabel(status?: TeamStatus) {
+  return status ? STATUS_DETAILS[status].label : 'Team status unavailable';
 }
