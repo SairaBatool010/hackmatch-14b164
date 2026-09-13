@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 import { View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Avatar, Button, Card, PressableFeedback, Spinner, Typography } from 'heroui-native';
-import { ChevronRight, Hash, LogOut, Plus, Sparkles } from 'lucide-react-native';
+import { Button, Card, Spinner, Typography } from 'heroui-native';
+import { ChevronRight, Hash, LogOut, Plus, Sparkles, UserRoundPen } from 'lucide-react-native';
 import { AppShell } from '@/components/AppShell';
 import { ENABLE_GROUPS } from '@/lib/features';
 import { getChannels } from '@/lib/hackmatch.api';
@@ -45,12 +45,6 @@ export function HomeDashboard() {
     setAppRole(null);
     router.replace('/role');
   };
-  const initials =
-    identity?.name
-      .split(/\s+/)
-      .map((p) => p[0])
-      .slice(0, 2)
-      .join('') ?? 'HM';
   return (
     <AppShell>
       <View className="mb-6 flex-row items-center justify-between">
@@ -61,15 +55,14 @@ export function HomeDashboard() {
           <Typography.Heading className="text-xl">HackMatch</Typography.Heading>
         </View>
         <View className="flex-row items-center gap-1">
+          <Button size="sm" variant="ghost" onPress={() => router.push('/profile/edit')}>
+            <UserRoundPen size={16} />
+            <Button.Label>Edit profile</Button.Label>
+          </Button>
           <Button size="sm" variant="ghost" onPress={changeRole}>
             <LogOut size={16} />
             <Button.Label>Change role</Button.Label>
           </Button>
-          <PressableFeedback onPress={() => router.push('/profile')}>
-            <Avatar alt="Profile">
-              <Avatar.Fallback>{initials}</Avatar.Fallback>
-            </Avatar>
-          </PressableFeedback>
         </View>
       </View>
       <Typography.Heading className="text-4xl">

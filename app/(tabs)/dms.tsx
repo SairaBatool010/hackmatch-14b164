@@ -5,19 +5,36 @@ import { ChevronRight, MessageCircle, Plus, Users } from 'lucide-react-native';
 import { View } from 'react-native';
 import { AppShell } from '@/components/AppShell';
 import { ParticipantTabGuard } from '@/components/ParticipantTabGuard';
-import { getChannels } from '@/lib/hackmatch.api';
+import { getChannels, getTeamRequests } from '@/lib/hackmatch.api';
 import { useHackmatchStore } from '@/lib/hackmatch.store';
-import type { Channel } from '@/lib/hackmatch.types';
-import { channelHref } from '@/lib/navigation';
+import type { Channel, TeamRequest } from '@/lib/hackmatch.types';
+import { channelHref, requestThreadHref } from '@/lib/navigation';
 function Content() {
   const router = useRouter();
   const identity = useHackmatchStore((s) => s.identity);
   const [teams, setTeams] = useState<Channel[]>([]);
+  const [requests, setRequests] = useState<TeamRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
-    if (identity)
-      setTeams((await getChannels(identity)).filter((c) => c.type === 'my_group' || c.group_id));
-    setLoading(false);
+    if (!identity) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const [channels, teamRequests] = await Promise.all([
+        getChannels(identity),
+        getTeamRequests(identity),
+      ]);
+      setTeams(channels.filter((channel) => channel.type === 'my_group' || channel.group_id));
+      setRequests(teamRequests);
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Conversations could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
   }, [identity]);
   useFocusEffect(
     useCallback(() => {
@@ -34,7 +51,7 @@ function Content() {
     <AppShell
       eyebrow="Private conversations"
       title="DMs"
-      description="Your team conversations live here."
+      description="Your team and team-up request conversations live here."
       action={
         <Button size="sm" onPress={() => router.push('/group/create')}>
           <Plus size={17} />
@@ -42,30 +59,77 @@ function Content() {
         </Button>
       }
     >
-      {teams.length ? (
-        <View className="gap-3">
-          {teams.map((team) => (
-            <Button
-              key={team.id}
-              variant="secondary"
-              className="h-auto justify-start p-4"
-              onPress={() => router.push(channelHref(team))}
-            >
-              <Users size={21} />
-              <View className="flex-1 items-start">
-                <Button.Label>{team.name}</Button.Label>
-                <Typography.Paragraph color="muted">{team.description}</Typography.Paragraph>
-              </View>
-              <ChevronRight size={18} />
-            </Button>
-          ))}
+      {error ? (
+        <Card className="bg-danger-soft mb-4 p-4">
+          <Typography>{error}</Typography>
+        </Card>
+      ) : null}
+      {teams.length || requests.length ? (
+        <View className="gap-6">
+          {requests.length ? (
+            <View className="gap-3">
+              <Typography.Heading className="text-lg">Team-up conversations</Typography.Heading>
+              {requests.map((request) => {
+                const outgoing = request.from_user_id === identity?.userId;
+                const personName = outgoing
+                  ? (request.to_name ?? 'Participant')
+                  : (request.from_name ?? 'Participant');
+                const status =
+                  request.status === 'accepted'
+                    ? 'Accepted'
+                    : request.status === 'declined'
+                      ? 'Declined'
+                      : outgoing
+                        ? 'Request sent'
+                        : 'Request received';
+                return (
+                  <Button
+                    key={request.id}
+                    variant="secondary"
+                    className="h-auto justify-start p-4"
+                    onPress={() => router.push(requestThreadHref(request.id, personName))}
+                  >
+                    <MessageCircle size={21} />
+                    <View className="flex-1 items-start">
+                      <Button.Label>{personName}</Button.Label>
+                      <Typography.Paragraph color="muted">{status}</Typography.Paragraph>
+                    </View>
+                    <ChevronRight size={18} />
+                  </Button>
+                );
+              })}
+            </View>
+          ) : null}
+          {teams.length ? (
+            <View className="gap-3">
+              <Typography.Heading className="text-lg">Team conversations</Typography.Heading>
+              {teams.map((team) => (
+                <Button
+                  key={team.id}
+                  variant="secondary"
+                  className="h-auto justify-start p-4"
+                  onPress={() => router.push(channelHref(team))}
+                >
+                  <Users size={21} />
+                  <View className="flex-1 items-start">
+                    <Button.Label>{team.name}</Button.Label>
+                    <Typography.Paragraph color="muted">{team.description}</Typography.Paragraph>
+                  </View>
+                  <ChevronRight size={18} />
+                </Button>
+              ))}
+            </View>
+          ) : null}
         </View>
       ) : (
         <Card className="items-center gap-4 px-6 py-12">
           <MessageCircle size={28} />
-          <Typography.Heading>No team conversations yet</Typography.Heading>
-          <Button onPress={() => router.push('/group/create')}>
-            <Button.Label>Create a team</Button.Label>
+          <Typography.Heading className="text-lg">No conversations yet</Typography.Heading>
+          <Typography.Paragraph color="muted" className="text-center">
+            Team-up requests and team chats will appear here.
+          </Typography.Paragraph>
+          <Button onPress={() => router.push('/find-team')}>
+            <Button.Label>Find teammates</Button.Label>
           </Button>
         </Card>
       )}

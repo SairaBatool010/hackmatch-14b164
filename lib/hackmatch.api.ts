@@ -290,6 +290,15 @@ export function getProfile(identity: ParticipantIdentity) {
   );
 }
 export function updateProfile(identity: ParticipantIdentity, values: ProfileValues) {
+  if (shouldUsePreviewData(identity)) {
+    const previewProfile = PREVIEW_PARTICIPANTS.find(
+      (participant) => participant.user_id === identity.userId,
+    );
+    return Promise.resolve<Profile>({
+      ...previewProfile,
+      ...profileBody(identity, values),
+    });
+  }
   return request<Profile>(
     `/profiles/${encodeURIComponent(identity.userId)}`,
     { method: 'PATCH', body: JSON.stringify(profileBody(identity, values)) },
