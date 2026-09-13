@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Button, Card, Chip, SearchField, Spinner, Typography } from 'heroui-native';
-import { ArrowLeft, Check, Pencil, Send, Sparkles, UserRoundSearch } from 'lucide-react-native';
+import { ArrowLeft, Pencil, Sparkles, UserRoundSearch } from 'lucide-react-native';
 import { AppShell } from '@/components/AppShell';
+import { TeamRequestActions } from '@/components/TeamRequestActions';
 import { TeamStatusDot } from '@/components/TeamStatusDot';
-import { getRecommendations, sendTeamInvite } from '@/lib/hackmatch.api';
+import { getRecommendations } from '@/lib/hackmatch.api';
 import { useHackmatchStore } from '@/lib/hackmatch.store';
 import type { Recommendation } from '@/lib/hackmatch.types';
 import { goBackOrReplace } from '@/lib/navigation';
@@ -46,13 +47,6 @@ export default function FindTeam() {
       ),
     [matches, query],
   );
-  const invite = async (m: Recommendation) => {
-    if (!identity) return;
-    await sendTeamInvite(identity, m.user_id);
-    setMatches((all) =>
-      all.map((x) => (x.user_id === m.user_id ? { ...x, invite_status: 'sent' } : x)),
-    );
-  };
   return (
     <AppShell>
       <View className="mb-5 flex-row items-center">
@@ -89,7 +83,6 @@ export default function FindTeam() {
           {visible.length ? (
             <View className="gap-4 md:flex-row md:flex-wrap">
               {visible.map((m) => {
-                const sent = m.invite_status === 'sent';
                 return (
                   <Card key={m.user_id} className="gap-4 p-5 md:w-[48%]">
                     <View className="flex-row items-center gap-3">
@@ -108,14 +101,19 @@ export default function FindTeam() {
                       ))}
                     </View>
                     <Typography.Paragraph>{m.reason}</Typography.Paragraph>
-                    <Button
-                      variant={sent ? 'secondary' : 'primary'}
-                      isDisabled={sent}
-                      onPress={() => void invite(m)}
-                    >
-                      {sent ? <Check size={16} /> : <Send size={16} />}
-                      <Button.Label>{sent ? 'Invite sent' : 'Invite to team'}</Button.Label>
-                    </Button>
+                    <TeamRequestActions
+                      recipientId={m.user_id}
+                      recipientName={m.name}
+                      onSent={() =>
+                        setMatches((all) =>
+                          all.map((candidate) =>
+                            candidate.user_id === m.user_id
+                              ? { ...candidate, invite_status: 'sent' }
+                              : candidate,
+                          ),
+                        )
+                      }
+                    />
                   </Card>
                 );
               })}

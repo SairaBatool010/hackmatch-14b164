@@ -3,6 +3,7 @@ import { Redirect } from 'expo-router';
 import { AppShell } from '@/components/AppShell';
 import { ProfileForm } from '@/components/ProfileForm';
 import { updateProfile } from '@/lib/hackmatch.api';
+import { useProfileFormSchema } from '@/hooks/useProfileFormSchema';
 import { useHackmatchStore } from '@/lib/hackmatch.store';
 import type { ProfileValues } from '@/lib/hackmatch.types';
 import { goBackOrReplace } from '@/lib/navigation';
@@ -13,6 +14,7 @@ export default function Edit() {
   const refresh = useHackmatchStore((s) => s.refreshRecommendations);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { schema } = useProfileFormSchema(identity);
   if (!identity) return <Redirect href="/invite" />;
   if (!profile) return <Redirect href="/profile/setup" />;
   const submit = async (values: ProfileValues) => {
@@ -39,6 +41,7 @@ export default function Edit() {
       <ProfileForm
         identity={identity}
         initialValues={profile}
+        schema={schema}
         submitLabel="Save and refresh matches"
         isSubmitting={busy}
         submitError={error}

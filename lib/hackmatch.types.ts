@@ -3,6 +3,22 @@ export type ChannelType = 'admin' | 'find_team' | 'my_group';
 export type InviteStatus = 'none' | 'pending' | 'sent' | 'accepted' | 'declined';
 export type AppRole = 'admin' | 'participant';
 export type TeamStatus = 'available' | 'forming' | 'finalized';
+export type ProfileQuestionType = 'short_text' | 'long_text' | 'multi_select' | 'single_select';
+export type ProfileAnswer = string | string[] | null;
+
+export interface ProfileQuestion {
+  id: string;
+  key: string;
+  label: string;
+  type: ProfileQuestionType;
+  required?: boolean;
+  options?: string[];
+  baseline?: boolean;
+}
+
+export interface ProfileFormSchema {
+  questions: ProfileQuestion[];
+}
 
 export interface ParticipantIdentity {
   userId: string;
@@ -18,6 +34,7 @@ export interface ProfileValues {
   roles_wanted: string[];
   availability: Availability;
   group_id?: string | null;
+  custom_fields?: Record<string, ProfileAnswer>;
 }
 export interface Profile extends ProfileValues {
   user_id: string;
@@ -65,10 +82,26 @@ export interface Recommendation {
 }
 export interface GroupInvite {
   id: string;
-  group_id: string;
+  group_id?: string;
   group_name?: string;
+  from_user_id?: string;
+  to_user_id?: string;
   from_name?: string;
+  to_name?: string;
+  note?: string | null;
   status?: InviteStatus;
+  direction?: 'incoming' | 'outgoing';
+  created_at?: string;
+}
+export interface TeamRequest extends GroupInvite {
+  from_user_id: string;
+  to_user_id: string;
+}
+export interface InviteConflict {
+  error: 'sender_already_grouped';
+  group_name?: string;
+  group_id?: string;
+  open_spots: number;
 }
 export interface Group {
   id: string;
@@ -89,6 +122,11 @@ export interface GroupMember {
   email?: string;
   role?: string;
   team_status?: TeamStatus;
+  bio?: string;
+  skills_have?: string[];
+  skills_want?: string[];
+  interests?: string[];
+  roles_wanted?: string[];
 }
 export interface ChannelMessage {
   id: string;
@@ -111,6 +149,15 @@ export interface AdminTeamSummary {
   member_count: number;
   capacity?: number;
   status?: 'forming' | 'complete';
+}
+export interface AdminTeamsData {
+  teams: AdminTeamSummary[];
+  no_group_participants: GroupMember[];
+}
+export interface AdminTeamCounts {
+  no_group: number;
+  partial: number;
+  complete: number;
 }
 export interface CreateChannelValues {
   name: string;

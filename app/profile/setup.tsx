@@ -3,6 +3,7 @@ import { Redirect, useRouter } from 'expo-router';
 import { AppShell } from '@/components/AppShell';
 import { ProfileForm } from '@/components/ProfileForm';
 import { createProfile } from '@/lib/hackmatch.api';
+import { useProfileFormSchema } from '@/hooks/useProfileFormSchema';
 import { useHackmatchStore } from '@/lib/hackmatch.store';
 import type { ProfileValues } from '@/lib/hackmatch.types';
 export default function Setup() {
@@ -11,6 +12,7 @@ export default function Setup() {
   const setProfile = useHackmatchStore((s) => s.setProfile);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { schema } = useProfileFormSchema(identity);
   if (!identity) return <Redirect href="/invite" />;
   const submit = async (values: ProfileValues) => {
     setBusy(true);
@@ -39,6 +41,7 @@ export default function Setup() {
     >
       <ProfileForm
         identity={identity}
+        schema={schema}
         submitLabel="Find my teammates"
         isSubmitting={busy}
         submitError={error}

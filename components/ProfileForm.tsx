@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, View } from 'react-native';
 import {
   Button,
@@ -13,7 +13,16 @@ import {
 } from 'heroui-native';
 import { Check } from 'lucide-react-native';
 import { TagInput } from '@/components/TagInput';
-import type { Availability, ParticipantIdentity, ProfileValues } from '@/lib/hackmatch.types';
+import { DEFAULT_PROFILE_SCHEMA } from '@/lib/hackmatch.api';
+import type {
+  Availability,
+  ParticipantIdentity,
+  ProfileAnswer,
+  ProfileFormSchema,
+  ProfileQuestion,
+  ProfileValues,
+} from '@/lib/hackmatch.types';
+
 const EMPTY: ProfileValues = {
   skills_have: [],
   skills_want: [],
@@ -22,16 +31,28 @@ const EMPTY: ProfileValues = {
   roles_wanted: [],
   availability: 'full_hackathon',
   group_id: null,
+  custom_fields: {},
 };
-const ROLES = ['Frontend', 'Backend', 'Design', 'PM', 'Data/ML'];
-const AVAIL: { value: Availability; label: string }[] = [
-  { value: 'full_hackathon', label: 'Full hackathon' },
-  { value: 'partial', label: 'Partial' },
-  { value: 'remote_only', label: 'Remote only' },
+const AVAILABILITY: { value: Availability; fallbackLabel: string }[] = [
+  { value: 'full_hackathon', fallbackLabel: 'Full hackathon' },
+  { value: 'partial', fallbackLabel: 'Partial' },
+  { value: 'remote_only', fallbackLabel: 'Remote only' },
 ];
+const ARRAY_KEYS = ['skills_have', 'skills_want', 'interests', 'roles_wanted'] as const;
+type ArrayKey = (typeof ARRAY_KEYS)[number];
+
+function isArrayKey(key: string): key is ArrayKey {
+  return ARRAY_KEYS.some((candidate) => candidate === key);
+}
+
+function customAnswer(values: ProfileValues, key: string): ProfileAnswer {
+  return values.custom_fields?.[key] ?? null;
+}
+
 export function ProfileForm({
   identity,
   initialValues,
+  schema = DEFAULT_PROFILE_SCHEMA,
   submitLabel,
   isSubmitting,
   submitError,
@@ -39,22 +60,206 @@ export function ProfileForm({
 }: {
   identity: ParticipantIdentity;
   initialValues?: ProfileValues;
+  schema?: ProfileFormSchema;
   submitLabel: string;
   isSubmitting: boolean;
   submitError?: string | null;
-  onSubmit: (v: ProfileValues) => Promise<void> | void;
+  onSubmit: (values: ProfileValues) => Promise<void> | void;
 }) {
-  const [values, setValues] = useState(initialValues ?? EMPTY);
+  const [values, setValues] = useState<ProfileValues>({
+    ...EMPTY,
+    ...initialValues,
+    custom_fields: initialValues?.custom_fields ?? {},
+  });
   const [validate, setValidate] = useState(false);
+  const questions = useMemo(
+    () => (schema.questions.length ? schema.questions : DEFAULT_PROFILE_SCHEMA.questions),
+    [schema.questions],
+  );
+  const requiredCustomMissing = questions.some((question) => {
+    if (!question.required || question.baseline) return false;
+    const answer = customAnswer(values, question.key);
+    return Array.isArray(answer) ? !answer.length : !answer?.trim();
+  });
   const invalid =
     !values.skills_have.length ||
     !values.skills_want.length ||
     !values.interests.length ||
-    values.bio.trim().length < 20;
+    values.bio.trim().length < 20 ||
+    requiredCustomMissing;
+
+  const setCustom = (key: string, answer: ProfileAnswer) => {
+    setValues((current) => ({
+      ...current,
+      custom_fields: { ...current.custom_fields, [key]: answer },
+    }));
+  };
   const submit = () => {
     setValidate(true);
     if (!invalid) void onSubmit({ ...values, bio: values.bio.trim() });
   };
+
+  const renderQuestion = (question: ProfileQuestion) => {
+    if (isArrayKey(question.key)) {
+      const selected = values[question.key];
+      if (question.key !== 'roles_wanted' || !question.options?.length) {
+        return (
+          <TextField
+            key={question.id}
+            isRequired={question.required}
+            isInvalid={validate && question.required && !selected.length}
+          >
+            <Label>{question.label}</Label>
+            <TagInput
+              value={selected}
+              onChange={(next) => setValues((current) => ({ ...current, [question.key]: next }))}
+              placeholder="Type an answer"
+            />
+            <FieldError>Add at least one answer.</FieldError>
+          </TextField>
+        );
+      }
+      return (
+        <View key={question.id} className="gap-3">
+          <Label>{question.label}</Label>
+          <View className="flex-row flex-wrap gap-2">
+            {question.options.map((option) => {
+              const active = selected.includes(option);
+              return (
+                <Button
+                  key={option}
+                  size="sm"
+                  variant={active ? 'primary' : 'secondary'}
+                  onPress={() =>
+                    setValues((current) => ({
+                      ...current,
+                      [question.key]: active
+                        ? selected.filter((item) => item !== option)
+                        : [...selected, option],
+                    }))
+                  }
+                >
+                  {active ? <Check size={15} /> : null}
+                  <Button.Label>{option}</Button.Label>
+                </Button>
+              );
+            })}
+          </View>
+        </View>
+      );
+    }
+    if (question.key === 'bio') {
+      return (
+        <TextField
+          key={question.id}
+          isRequired
+          isInvalid={validate && values.bio.trim().length < 20}
+        >
+          <Label>{question.label}</Label>
+          <TextArea
+            value={values.bio}
+            onChangeText={(bio) => setValues((current) => ({ ...current, bio }))}
+          />
+          <Description>Write at least 20 characters.</Description>
+          <FieldError>Add a little more detail.</FieldError>
+        </TextField>
+      );
+    }
+    if (question.key === 'availability') {
+      return (
+        <View key={question.id} className="gap-3">
+          <Label>{question.label}</Label>
+          <View className="gap-2 sm:flex-row">
+            {AVAILABILITY.map((item, index) => (
+              <Button
+                key={item.value}
+                className="flex-1"
+                variant={values.availability === item.value ? 'primary' : 'secondary'}
+                onPress={() => setValues((current) => ({ ...current, availability: item.value }))}
+              >
+                <Button.Label>{question.options?.[index] ?? item.fallbackLabel}</Button.Label>
+              </Button>
+            ))}
+          </View>
+        </View>
+      );
+    }
+
+    const answer = customAnswer(values, question.key);
+    const missing = question.required && (Array.isArray(answer) ? !answer.length : !answer?.trim());
+    if (question.type === 'multi_select') {
+      const selected = Array.isArray(answer) ? answer : [];
+      return (
+        <TextField key={question.id} isRequired={question.required} isInvalid={validate && missing}>
+          <Label>{question.label}</Label>
+          {question.options?.length ? (
+            <View className="flex-row flex-wrap gap-2">
+              {question.options.map((option) => {
+                const active = selected.includes(option);
+                return (
+                  <Button
+                    key={option}
+                    size="sm"
+                    variant={active ? 'primary' : 'secondary'}
+                    onPress={() =>
+                      setCustom(
+                        question.key,
+                        active ? selected.filter((item) => item !== option) : [...selected, option],
+                      )
+                    }
+                  >
+                    {active ? <Check size={15} /> : null}
+                    <Button.Label>{option}</Button.Label>
+                  </Button>
+                );
+              })}
+            </View>
+          ) : (
+            <TagInput
+              value={selected}
+              onChange={(next) => setCustom(question.key, next)}
+              placeholder="Type an answer"
+            />
+          )}
+          <FieldError>This question is required.</FieldError>
+        </TextField>
+      );
+    }
+    if (question.type === 'single_select') {
+      const selected = typeof answer === 'string' ? answer : '';
+      return (
+        <TextField key={question.id} isRequired={question.required} isInvalid={validate && missing}>
+          <Label>{question.label}</Label>
+          <View className="flex-row flex-wrap gap-2">
+            {(question.options ?? []).map((option) => (
+              <Button
+                key={option}
+                size="sm"
+                variant={selected === option ? 'primary' : 'secondary'}
+                onPress={() => setCustom(question.key, option)}
+              >
+                <Button.Label>{option}</Button.Label>
+              </Button>
+            ))}
+          </View>
+          <FieldError>This question is required.</FieldError>
+        </TextField>
+      );
+    }
+    const text = typeof answer === 'string' ? answer : '';
+    return (
+      <TextField key={question.id} isRequired={question.required} isInvalid={validate && missing}>
+        <Label>{question.label}</Label>
+        {question.type === 'long_text' ? (
+          <TextArea value={text} onChangeText={(next) => setCustom(question.key, next)} />
+        ) : (
+          <Input value={text} onChangeText={(next) => setCustom(question.key, next)} />
+        )}
+        <FieldError>This question is required.</FieldError>
+      </TextField>
+    );
+  };
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View className="gap-6">
@@ -72,84 +277,7 @@ export function ProfileForm({
           </View>
         </Card>
         <Card className="gap-7 p-5">
-          <TextField isRequired isInvalid={validate && !values.skills_have.length}>
-            <Label>Skills you bring</Label>
-            <TagInput
-              value={values.skills_have}
-              onChange={(skills_have) => setValues({ ...values, skills_have })}
-              placeholder="Type a skill"
-            />
-            <FieldError>Add at least one skill.</FieldError>
-          </TextField>
-          <TextField isRequired isInvalid={validate && !values.skills_want.length}>
-            <Label>Skills you want</Label>
-            <TagInput
-              value={values.skills_want}
-              onChange={(skills_want) => setValues({ ...values, skills_want })}
-              placeholder="Type a skill"
-            />
-            <FieldError>Add at least one skill.</FieldError>
-          </TextField>
-          <TextField isRequired isInvalid={validate && !values.interests.length}>
-            <Label>Interests</Label>
-            <TagInput
-              value={values.interests}
-              onChange={(interests) => setValues({ ...values, interests })}
-              placeholder="Type an interest"
-            />
-            <FieldError>Add at least one interest.</FieldError>
-          </TextField>
-          <TextField isRequired isInvalid={validate && values.bio.trim().length < 20}>
-            <Label>About you</Label>
-            <TextArea
-              value={values.bio}
-              onChangeText={(bio) => setValues({ ...values, bio })}
-              placeholder="What would you like to build?"
-            />
-            <Description>Write at least 20 characters.</Description>
-            <FieldError>Add a little more detail.</FieldError>
-          </TextField>
-          <View className="gap-3">
-            <Label>Roles you want to find</Label>
-            <View className="flex-row flex-wrap gap-2">
-              {ROLES.map((r) => {
-                const selected = values.roles_wanted.includes(r);
-                return (
-                  <Button
-                    key={r}
-                    size="sm"
-                    variant={selected ? 'primary' : 'secondary'}
-                    onPress={() =>
-                      setValues({
-                        ...values,
-                        roles_wanted: selected
-                          ? values.roles_wanted.filter((x) => x !== r)
-                          : [...values.roles_wanted, r],
-                      })
-                    }
-                  >
-                    {selected ? <Check size={15} /> : null}
-                    <Button.Label>{r}</Button.Label>
-                  </Button>
-                );
-              })}
-            </View>
-          </View>
-          <View className="gap-3">
-            <Label>Availability</Label>
-            <View className="gap-2 sm:flex-row">
-              {AVAIL.map((a) => (
-                <Button
-                  key={a.value}
-                  className="flex-1"
-                  variant={values.availability === a.value ? 'primary' : 'secondary'}
-                  onPress={() => setValues({ ...values, availability: a.value })}
-                >
-                  <Button.Label>{a.label}</Button.Label>
-                </Button>
-              ))}
-            </View>
-          </View>
+          {questions.map(renderQuestion)}
           {submitError ? <Typography className="text-danger">{submitError}</Typography> : null}
           <Button size="lg" isDisabled={isSubmitting} onPress={submit}>
             <Button.Label>{isSubmitting ? 'Saving…' : submitLabel}</Button.Label>

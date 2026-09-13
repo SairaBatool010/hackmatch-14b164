@@ -6,24 +6,36 @@ import {
   View,
   type ListRenderItemInfo,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Button, Input, Spinner, Typography } from 'heroui-native';
-import { ArrowLeft, Lock, Send } from 'lucide-react-native';
+import { ArrowLeft, Lock, Send, Users } from 'lucide-react-native';
 import { SafeAreaView } from '@/components/ui/primitives/SafeAreaView';
 import { getChannelMessages, postChannelMessage } from '@/lib/hackmatch.api';
 import { useHackmatchStore } from '@/lib/hackmatch.store';
-import type { ChannelMessage } from '@/lib/hackmatch.types';
-import { goBackOrReplace } from '@/lib/navigation';
+import type { Channel, ChannelMessage } from '@/lib/hackmatch.types';
+import { channelMembersHref, goBackOrReplace, memberProfileHref } from '@/lib/navigation';
 export default function Channel() {
+  const router = useRouter();
   const params = useLocalSearchParams<{
     id: string;
     name?: string;
     description?: string;
+    type?: Channel['type'];
+    group_id?: string;
     allows_posting?: string;
   }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const name = (Array.isArray(params.name) ? params.name[0] : params.name) ?? 'Channel';
   const allows = params.allows_posting !== 'false';
+  const channel: Channel = {
+    id,
+    name,
+    description:
+      (Array.isArray(params.description) ? params.description[0] : params.description) ?? '',
+    type: (Array.isArray(params.type) ? params.type[0] : params.type) ?? 'admin',
+    group_id: (Array.isArray(params.group_id) ? params.group_id[0] : params.group_id) || undefined,
+    allows_posting: allows,
+  };
   const identity = useHackmatchStore((s) => s.identity);
   const [messages, setMessages] = useState<ChannelMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -54,7 +66,15 @@ export default function Channel() {
     const own = item.user_id === identity?.userId;
     return (
       <View className={`mb-3 ${own ? 'items-end' : 'items-start'}`}>
-        {!own ? <Typography className="mb-1 text-xs">{item.author_name}</Typography> : null}
+        {!own ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onPress={() => router.push(memberProfileHref(item.user_id))}
+          >
+            <Button.Label>{item.author_name}</Button.Label>
+          </Button>
+        ) : null}
         <View
           className={`max-w-[82%] rounded-2xl px-4 py-3 ${own ? 'bg-accent' : 'bg-surface-secondary'}`}
         >
@@ -74,10 +94,18 @@ export default function Channel() {
             <Button isIconOnly variant="ghost" onPress={() => goBackOrReplace('/(tabs)')}>
               <ArrowLeft size={21} />
             </Button>
-            <View>
+            <View className="flex-1">
               <Typography.Heading>{name}</Typography.Heading>
               <Typography.Paragraph color="muted">{params.description}</Typography.Paragraph>
             </View>
+            <Button
+              variant="secondary"
+              size="sm"
+              onPress={() => router.push(channelMembersHref(channel))}
+            >
+              <Users size={16} />
+              <Button.Label>View members</Button.Label>
+            </Button>
           </View>
           {loading ? (
             <View className="flex-1 items-center justify-center">

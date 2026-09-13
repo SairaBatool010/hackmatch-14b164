@@ -2,6 +2,8 @@ import { bilt } from '@/lib/bilt';
 import { PREVIEW_PARTICIPANTS, searchPreviewParticipants } from '@/lib/hackmatch.preview';
 import type {
   AdminAnalytics,
+  AdminTeamCounts,
+  AdminTeamsData,
   AdminTeamSummary,
   Channel,
   ChannelMessage,
@@ -12,9 +14,12 @@ import type {
   ParticipantIdentity,
   ParticipantSearchResult,
   Profile,
+  ProfileFormSchema,
+  ProfileQuestion,
   ProfileValues,
   Recommendation,
   RecommenderGroup,
+  TeamRequest,
 } from '@/lib/hackmatch.types';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
@@ -97,10 +102,65 @@ const MESSAGES: Record<string, ChannelMessage[]> = {
     },
   ],
 };
+const DEFAULT_ROLES = ['Frontend', 'Backend', 'Design', 'PM', 'Data/ML'];
+export const DEFAULT_PROFILE_SCHEMA: ProfileFormSchema = {
+  questions: [
+    {
+      id: 'skills-have',
+      key: 'skills_have',
+      label: 'Skills you bring',
+      type: 'multi_select',
+      required: true,
+      baseline: true,
+    },
+    {
+      id: 'skills-want',
+      key: 'skills_want',
+      label: 'Skills you want',
+      type: 'multi_select',
+      required: true,
+      baseline: true,
+    },
+    {
+      id: 'interests',
+      key: 'interests',
+      label: 'Interests',
+      type: 'multi_select',
+      required: true,
+      baseline: true,
+    },
+    {
+      id: 'bio',
+      key: 'bio',
+      label: 'About you',
+      type: 'long_text',
+      required: true,
+      baseline: true,
+    },
+    {
+      id: 'roles-wanted',
+      key: 'roles_wanted',
+      label: 'Roles you want to find',
+      type: 'multi_select',
+      options: DEFAULT_ROLES,
+      baseline: true,
+    },
+    {
+      id: 'availability',
+      key: 'availability',
+      label: 'Availability',
+      type: 'single_select',
+      options: ['Full hackathon', 'Partial', 'Remote only'],
+      baseline: true,
+    },
+  ],
+};
+
 export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public data?: unknown,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -135,7 +195,7 @@ async function request<T>(
         : typeof data === 'object' && data && 'error' in data
           ? String(data.error)
           : 'Something went wrong. Please try again.';
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, data);
   }
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return data as T;
@@ -170,6 +230,33 @@ function profileBody(identity: ParticipantIdentity, values: ProfileValues) {
     group_id: values.group_id ?? null,
   };
 }
+export async function getProfileFormSchema(identity?: ParticipantIdentity | null) {
+  try {
+    const result = await request<ProfileFormSchema | ProfileQuestion[]>(
+      '/admin/form-schema',
+      {},
+      identity?.accessToken,
+    );
+    return Array.isArray(result) ? { questions: result } : result;
+  } catch (caught) {
+    if (caught instanceof ApiError && (caught.status === 404 || caught.status === 0)) {
+      return DEFAULT_PROFILE_SCHEMA;
+    }
+    throw caught;
+  }
+}
+export async function saveProfileFormSchema(
+  schema: ProfileFormSchema,
+  identity?: ParticipantIdentity | null,
+) {
+  const result = await request<ProfileFormSchema | ProfileQuestion[]>(
+    '/admin/form-schema',
+    { method: 'POST', body: JSON.stringify(schema.questions) },
+    identity?.accessToken,
+  );
+  return Array.isArray(result) ? { questions: result } : result;
+}
+
 export function createProfile(identity: ParticipantIdentity, values: ProfileValues) {
   return request<Profile>(
     '/profiles',
@@ -281,10 +368,53 @@ export async function getRecommendations(
   >(`/recommendations/${encodeURIComponent(identity.userId)}`, {}, identity.accessToken);
   return Array.isArray(result) ? result : asArray(result.recommendations ?? result.data);
 }
-export function sendTeamInvite(identity: ParticipantIdentity, toUserId: string) {
-  return request<{ status: string }>(
+export function sendTeamInvite(
+  identity: ParticipantIdentity,
+  toUserId: string,
+  note: string | null = null,
+) {
+  return request<TeamRequest | { invite: TeamRequest }>(
     '/invite',
-    { method: 'POST', body: JSON.stringify({ user_id: identity.userId, to_user_id: toUserId }) },
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        from_user_id: identity.userId,
+        to_user_id: toUserId,
+        note: note?.trim() || null,
+      }),
+    },
+    identity.accessToken,
+  ).then((result) => ('invite' in result ? result.invite : result));
+}
+export async function getTeamRequests(identity: ParticipantIdentity) {
+  const result = await request<
+    TeamRequest[] | { data?: TeamRequest[]; invitations?: TeamRequest[]; requests?: TeamRequest[] }
+  >(`/invites?user_id=${encodeURIComponent(identity.userId)}`, {}, identity.accessToken);
+  return Array.isArray(result)
+    ? result
+    : asArray(result.requests ?? result.invitations ?? result.data);
+}
+export function respondToTeamRequest(
+  identity: ParticipantIdentity,
+  inviteId: string,
+  accept: boolean,
+) {
+  return request<{ status: string }>(
+    `/invite/${encodeURIComponent(inviteId)}/respond`,
+    { method: 'POST', body: JSON.stringify({ accept }) },
+    identity.accessToken,
+  );
+}
+export async function getInviteMessages(identity: ParticipantIdentity, inviteId: string) {
+  const result = await request<
+    ChannelMessage[] | { data?: ChannelMessage[]; messages?: ChannelMessage[] }
+  >(`/invite/${encodeURIComponent(inviteId)}/messages`, {}, identity.accessToken);
+  return Array.isArray(result) ? result : asArray(result.messages ?? result.data);
+}
+export function postInviteMessage(identity: ParticipantIdentity, inviteId: string, body: string) {
+  return request<ChannelMessage>(
+    `/invite/${encodeURIComponent(inviteId)}/messages`,
+    { method: 'POST', body: JSON.stringify({ user_id: identity.userId, body }) },
     identity.accessToken,
   );
 }
@@ -330,11 +460,34 @@ export function respondToGroupInvite(
 export function getAdminAnalytics() {
   return request<AdminAnalytics>('/admin/analytics');
 }
-export async function getAdminTeams() {
+export async function getAdminTeamsData(): Promise<AdminTeamsData> {
   const result = await request<
-    AdminTeamSummary[] | { data?: AdminTeamSummary[]; teams?: AdminTeamSummary[] }
+    AdminTeamSummary[] | (Partial<AdminTeamsData> & { data?: AdminTeamSummary[] })
   >('/admin/teams');
-  return Array.isArray(result) ? result : asArray(result.teams ?? result.data);
+  if (Array.isArray(result)) return { teams: result, no_group_participants: [] };
+  return {
+    teams: asArray(result.teams ?? result.data),
+    no_group_participants: asArray(result.no_group_participants),
+  };
+}
+export async function getAdminTeams() {
+  return (await getAdminTeamsData()).teams;
+}
+export async function getAdminTeamCounts(
+  teams: AdminTeamSummary[],
+  noGroupFallback = 0,
+): Promise<AdminTeamCounts> {
+  try {
+    return await request<AdminTeamCounts>('/admin/teams/summary');
+  } catch (caught) {
+    if (!(caught instanceof ApiError) || (caught.status !== 404 && caught.status !== 0))
+      throw caught;
+    return {
+      no_group: noGroupFallback,
+      partial: teams.filter((team) => team.member_count < (team.capacity ?? 5)).length,
+      complete: teams.filter((team) => team.member_count >= (team.capacity ?? 5)).length,
+    };
+  }
 }
 export async function getAdminChannels() {
   const result = await request<Channel[] | { data?: Channel[]; channels?: Channel[] }>(
@@ -374,11 +527,38 @@ export function postChannelMessage(identity: ParticipantIdentity, channelId: str
     identity.accessToken,
   );
 }
-export async function getGroupMembers(
+export function getParticipantProfile(identity: ParticipantIdentity | null, userId: string) {
+  if (USE_PREVIEW_DATA) {
+    const preview = PREVIEW_PARTICIPANTS.find((participant) => participant.user_id === userId);
+    if (preview) return Promise.resolve(preview);
+  }
+  return request<Profile>(`/profiles/${encodeURIComponent(userId)}`, {}, identity?.accessToken);
+}
+export async function getChannelMembers(
   identity: ParticipantIdentity,
+  channelId: string,
+): Promise<GroupMember[]> {
+  if (USE_PREVIEW_DATA) {
+    return PREVIEW_PARTICIPANTS.map((participant) => ({
+      user_id: participant.user_id,
+      name: participant.name,
+      email: participant.email,
+      team_status: participant.team_status,
+    }));
+  }
+  const result = await request<GroupMember[] | { data?: GroupMember[]; members?: GroupMember[] }>(
+    `/channels/${encodeURIComponent(channelId)}/members`,
+    {},
+    identity.accessToken,
+  );
+  return Array.isArray(result) ? result : asArray(result.members ?? result.data);
+}
+
+export async function getGroupMembers(
+  identity: ParticipantIdentity | null,
   groupId: string,
 ): Promise<GroupMember[]> {
-  if (USE_PREVIEW_DATA && groupId === GROUP_ID)
+  if (USE_PREVIEW_DATA && groupId === GROUP_ID && identity)
     return [
       {
         user_id: identity.userId,
@@ -397,7 +577,7 @@ export async function getGroupMembers(
   const result = await request<GroupMember[] | { data?: GroupMember[]; members?: GroupMember[] }>(
     `/groups/${encodeURIComponent(groupId)}/members`,
     {},
-    identity.accessToken,
+    identity?.accessToken,
   );
   return Array.isArray(result) ? result : asArray(result.members ?? result.data);
 }
