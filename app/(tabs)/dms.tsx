@@ -65,6 +65,8 @@ function Content() {
   useFocusEffect(
     useCallback(() => {
       void load();
+      const refreshTimer = setInterval(() => void load(), 5000);
+      return () => clearInterval(refreshTimer);
     }, [load]),
   );
   const directConversations = identity

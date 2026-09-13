@@ -56,7 +56,11 @@ function Content() {
     }
     setItems(next);
     if (requests.status === 'rejected' && groups.status === 'rejected') {
-      setError('Activity could not be loaded. Pull back here and try again.');
+      setError('Activity could not be loaded. Return to this screen to try again.');
+    } else if (groups.status === 'rejected') {
+      setError('Team invitations could not be loaded. Return to this screen to try again.');
+    } else if (requests.status === 'rejected') {
+      setError('Team requests could not be loaded. Return to this screen to try again.');
     } else {
       setError(null);
     }
@@ -66,6 +70,8 @@ function Content() {
   useFocusEffect(
     useCallback(() => {
       void load();
+      const refreshTimer = setInterval(() => void load(), 5000);
+      return () => clearInterval(refreshTimer);
     }, [load]),
   );
 
