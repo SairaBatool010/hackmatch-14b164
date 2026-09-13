@@ -14,7 +14,7 @@ export function ParticipantTabGuard({ children }: PropsWithChildren) {
     return (
       <View className="bg-background flex-1 items-center justify-center gap-3">
         <Spinner size="lg" />
-        <Typography.Paragraph color="muted">Opening HackMatch…</Typography.Paragraph>
+        <Typography.Paragraph color="muted">Opening talash…</Typography.Paragraph>
       </View>
     );
   if (!appRole) return <Redirect href="/role" />;

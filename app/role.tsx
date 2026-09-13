@@ -53,7 +53,7 @@ export default function RoleScreen() {
       <View className="mx-auto w-full max-w-4xl gap-8 pt-12">
         <View className="items-center gap-3">
           <Typography.Paragraph className="text-accent font-semibold uppercase">
-            HackMatch access
+            talash access
           </Typography.Paragraph>
           <Typography.Heading className="text-center text-4xl">
             Choose how you want to enter

@@ -142,7 +142,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <HeroUINativeProvider>
         <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" options={{ title: 'HackMatch' }} />
+          <Stack.Screen name="(tabs)" options={{ title: 'talash' }} />
           <Stack.Screen name="role" options={{ title: 'Choose access' }} />
           <Stack.Screen name="admin/index" options={{ title: 'Admin dashboard' }} />
           <Stack.Screen name="admin/form-schema" options={{ title: 'Profile form builder' }} />

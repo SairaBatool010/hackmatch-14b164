@@ -12,8 +12,9 @@ import {
   TextField,
   Typography,
 } from 'heroui-native';
-import { KeyRound, Users } from 'lucide-react-native';
+import { KeyRound } from 'lucide-react-native';
 import { AppShell } from '@/components/AppShell';
+import { TalashLogo } from '@/components/TalashLogo';
 import { confirmInvitation } from '@/lib/hackmatch.api';
 import { PREVIEW_ACCOUNTS } from '@/lib/hackmatch.preview';
 import { useHackmatchStore } from '@/lib/hackmatch.store';
@@ -65,10 +66,8 @@ export default function InviteScreen() {
     <AppShell width="narrow">
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View className="mx-auto w-full max-w-xl gap-6 pt-12">
-          <View className="bg-accent-soft h-14 w-14 items-center justify-center rounded-2xl">
-            <Users className="text-accent" size={28} />
-          </View>
-          <Typography.Heading className="text-4xl">Welcome to HackMatch</Typography.Heading>
+          <TalashLogo size={56} />
+          <Typography.Heading className="text-4xl">Welcome to talash</Typography.Heading>
           <Card className="gap-5 p-6">
             {preview ? (
               <View className="gap-3">

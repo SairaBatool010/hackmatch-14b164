@@ -10,8 +10,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
 
   return {
     ...config,
-    name: 'HackMatch',
-    slug: 'hackmatch',
+    name: 'talash',
+    slug: 'talash',
     version: process.env.BILT_APP_VERSION ?? '1.0.0',
     orientation: 'portrait',
     userInterfaceStyle: 'automatic',

@@ -4,6 +4,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Button, Card, Spinner, Typography } from 'heroui-native';
 import { ChevronRight, Hash, LogOut, Plus, Sparkles, UserRoundPen } from 'lucide-react-native';
 import { AppShell } from '@/components/AppShell';
+import { TalashLogo } from '@/components/TalashLogo';
 import { ENABLE_GROUPS } from '@/lib/features';
 import { getChannels } from '@/lib/hackmatch.api';
 import { useHackmatchStore } from '@/lib/hackmatch.store';
@@ -49,10 +50,8 @@ export function HomeDashboard() {
     <AppShell>
       <View className="mb-6 flex-row items-center justify-between">
         <View className="flex-row items-center gap-3">
-          <View className="bg-accent h-10 w-10 items-center justify-center rounded-xl">
-            <Sparkles className="text-accent-foreground" size={20} />
-          </View>
-          <Typography.Heading className="text-xl">HackMatch</Typography.Heading>
+          <TalashLogo size={40} />
+          <Typography.Heading className="text-xl">talash</Typography.Heading>
         </View>
         <View className="items-end gap-1">
           <Button size="sm" variant="ghost" onPress={() => router.push('/profile/edit')}>
