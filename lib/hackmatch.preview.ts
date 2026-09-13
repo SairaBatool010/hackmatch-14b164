@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
+  Channel,
   ChannelMessage,
+  Group,
+  GroupMember,
   ParticipantIdentity,
   ParticipantSearchResult,
   Profile,
@@ -47,7 +50,17 @@ interface StoredPreviewRequest {
   created_at: string;
 }
 
+interface StoredPreviewGroup {
+  id: string;
+  code: string;
+  name: string;
+  leader_user_id: string;
+  member_user_ids: string[];
+  created_at: string;
+}
+
 const REQUESTS_KEY = 'hackmatch-preview-requests';
+const GROUPS_KEY = 'hackmatch-preview-groups';
 const MESSAGE_KEY_PREFIX = 'hackmatch-preview-request-messages:';
 
 function participantName(userId: string) {
@@ -83,6 +96,78 @@ function isChannelMessage(value: unknown): value is ChannelMessage {
     typeof value.body === 'string' &&
     typeof value.created_at === 'string'
   );
+}
+
+function isStoredPreviewGroup(value: unknown): value is StoredPreviewGroup {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.code === 'string' &&
+    typeof value.name === 'string' &&
+    typeof value.leader_user_id === 'string' &&
+    Array.isArray(value.member_user_ids) &&
+    value.member_user_ids.every((memberId) => typeof memberId === 'string') &&
+    typeof value.created_at === 'string'
+  );
+}
+
+async function readPreviewGroups(): Promise<StoredPreviewGroup[]> {
+  const value = await AsyncStorage.getItem(GROUPS_KEY);
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter(isStoredPreviewGroup) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function createPreviewGroup(
+  identity: ParticipantIdentity,
+  name: string,
+): Promise<Group> {
+  const groups = await readPreviewGroups();
+  const timestamp = Date.now();
+  const group: StoredPreviewGroup = {
+    id: `preview-group-${timestamp}`,
+    code: `TEAM-${String(timestamp).slice(-6)}`,
+    name: name.trim(),
+    leader_user_id: identity.userId,
+    member_user_ids: [identity.userId],
+    created_at: new Date(timestamp).toISOString(),
+  };
+  await AsyncStorage.setItem(GROUPS_KEY, JSON.stringify([group, ...groups]));
+  return group;
+}
+
+export async function getPreviewGroupChannels(identity: ParticipantIdentity): Promise<Channel[]> {
+  const groups = await readPreviewGroups();
+  return groups
+    .filter((group) => group.member_user_ids.includes(identity.userId))
+    .map((group) => ({
+      id: `preview-channel-${group.id}`,
+      name: group.name,
+      description: 'Your private team collaboration space.',
+      type: 'my_group' as const,
+      group_id: group.id,
+      allows_posting: true,
+    }));
+}
+
+export async function getPreviewGroupMembers(groupId: string): Promise<GroupMember[]> {
+  const groups = await readPreviewGroups();
+  const group = groups.find((item) => item.id === groupId);
+  if (!group) return [];
+  return group.member_user_ids.map((userId) => {
+    const profile = PREVIEW_PARTICIPANTS.find((participant) => participant.user_id === userId);
+    return {
+      user_id: userId,
+      name: profile?.name ?? participantName(userId),
+      email: profile?.email,
+      role: userId === group.leader_user_id ? 'Team lead' : 'Team member',
+      team_status: 'forming',
+    };
+  });
 }
 
 async function readPreviewRequests(): Promise<StoredPreviewRequest[]> {

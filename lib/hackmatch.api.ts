@@ -1,6 +1,9 @@
 import { bilt } from '@/lib/bilt';
 import {
+  createPreviewGroup,
   createPreviewTeamRequest,
+  getPreviewGroupChannels,
+  getPreviewGroupMembers,
   getPreviewInviteMessages,
   getPreviewTeamRequests,
   postPreviewInviteMessage,
@@ -32,7 +35,6 @@ import type {
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
 const USE_PREVIEW_DATA = __DEV__;
-const GROUP_ID = 'preview-group-builders';
 
 function shouldUsePreviewData(identity?: ParticipantIdentity | null) {
   return (
@@ -79,14 +81,6 @@ const CHANNELS: Channel[] = [
     type: 'find_team',
     allows_posting: false,
   },
-  {
-    id: 'preview-team-builders',
-    name: 'team-builders',
-    description: 'Your private team collaboration space.',
-    type: 'my_group',
-    group_id: GROUP_ID,
-    allows_posting: true,
-  },
 ];
 const MESSAGES: Record<string, ChannelMessage[]> = {
   'preview-announcements': [
@@ -106,16 +100,6 @@ const MESSAGES: Record<string, ChannelMessage[]> = {
       user_id: 'preview-user-1',
       author_name: 'Maya Chen',
       body: 'Where should we submit the final project link?',
-      created_at: new Date().toISOString(),
-    },
-  ],
-  'preview-team-builders': [
-    {
-      id: 't1',
-      channel_id: 'preview-team-builders',
-      user_id: 'preview-user-2',
-      author_name: 'Grace Liu',
-      body: 'What should we prioritize for the prototype?',
       created_at: new Date().toISOString(),
     },
   ],
@@ -331,7 +315,10 @@ export function updateProfile(identity: ParticipantIdentity, values: ProfileValu
   );
 }
 export async function getChannels(identity: ParticipantIdentity) {
-  if (shouldUsePreviewData(identity)) return CHANNELS;
+  if (shouldUsePreviewData(identity)) {
+    const teamChannels = await getPreviewGroupChannels(identity);
+    return [...CHANNELS, ...teamChannels];
+  }
   const result = await request<Channel[] | { data?: Channel[]; channels?: Channel[] }>(
     `/channels?user_id=${encodeURIComponent(identity.userId)}`,
     {},
@@ -508,6 +495,7 @@ export function postInviteMessage(identity: ParticipantIdentity, inviteId: strin
   );
 }
 export function createGroup(identity: ParticipantIdentity, name: string) {
+  if (shouldUsePreviewData(identity)) return createPreviewGroup(identity, name);
   return request<Group>(
     '/group/create',
     { method: 'POST', body: JSON.stringify({ user_id: identity.userId, name }) },
@@ -523,6 +511,7 @@ export async function searchParticipants(identity: ParticipantIdentity, query: s
   return Array.isArray(result) ? result : asArray(result.users ?? result.data);
 }
 export function inviteToGroup(identity: ParticipantIdentity, groupId: string, toUserId: string) {
+  if (shouldUsePreviewData(identity)) return Promise.resolve({ status: 'sent' });
   return request<{ status: string }>(
     '/group/invite',
     { method: 'POST', body: JSON.stringify({ group_id: groupId, to_user_id: toUserId }) },
@@ -629,6 +618,10 @@ export async function getChannelMembers(
   channelId: string,
 ): Promise<GroupMember[]> {
   if (shouldUsePreviewData(identity)) {
+    const previewGroupId = channelId.startsWith('preview-channel-')
+      ? channelId.slice('preview-channel-'.length)
+      : null;
+    if (previewGroupId) return getPreviewGroupMembers(previewGroupId);
     return PREVIEW_PARTICIPANTS.map((participant) => ({
       user_id: participant.user_id,
       name: participant.name,
@@ -648,22 +641,10 @@ export async function getGroupMembers(
   identity: ParticipantIdentity | null,
   groupId: string,
 ): Promise<GroupMember[]> {
-  if (shouldUsePreviewData(identity) && groupId === GROUP_ID && identity)
-    return [
-      {
-        user_id: identity.userId,
-        name: identity.name,
-        email: identity.email,
-        role: 'Team member',
-        team_status: 'forming',
-      },
-      ...PREVIEW_PARTICIPANTS.slice(0, 3).map((p) => ({
-        user_id: p.user_id,
-        name: p.name,
-        email: p.email,
-        team_status: p.team_status,
-      })),
-    ];
+  if (shouldUsePreviewData(identity) && identity) {
+    const previewMembers = await getPreviewGroupMembers(groupId);
+    if (previewMembers.length) return previewMembers;
+  }
   const result = await request<GroupMember[] | { data?: GroupMember[]; members?: GroupMember[] }>(
     `/groups/${encodeURIComponent(groupId)}/members`,
     {},
