@@ -115,8 +115,8 @@ export default function CreateGroup() {
           <Card className="gap-2 p-5">
             <Typography.Heading className="text-lg">Team created</Typography.Heading>
             <Typography.Paragraph color="muted">
-              Invite a participant below. Their one-time code is sent automatically in your direct
-              message, and the {group.name ?? name} team chat will appear after they confirm it.
+              Invite a participant below. They can accept from Activity, and then they will be added
+              to the existing {group.name ?? name} team chat.
             </Typography.Paragraph>
           </Card>
           <Card className="gap-4 p-5">
@@ -143,7 +143,7 @@ export default function CreateGroup() {
                   </View>
                   <Button isDisabled={invited.includes(p.id)} onPress={() => void invite(p)}>
                     {invited.includes(p.id) ? <Check size={15} /> : <UserPlus size={15} />}
-                    <Button.Label>{invited.includes(p.id) ? 'Code sent' : 'Invite'}</Button.Label>
+                    <Button.Label>{invited.includes(p.id) ? 'Invited' : 'Invite'}</Button.Label>
                   </Button>
                 </View>
               ))

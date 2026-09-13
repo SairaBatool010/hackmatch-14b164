@@ -1,6 +1,5 @@
 import { bilt } from '@/lib/bilt';
 import {
-  confirmPreviewGroupInvite,
   createPreviewGroup,
   createPreviewGroupInvite,
   createPreviewTeamRequest,
@@ -22,10 +21,10 @@ import type {
   AdminTeamSummary,
   Channel,
   ChannelMessage,
-  ConfirmGroupInviteResult,
   CreateChannelValues,
   Group,
   GroupInvite,
+  GroupInviteResponse,
   GroupMember,
   ParticipantIdentity,
   ParticipantSearchResult,
@@ -540,18 +539,11 @@ export function respondToGroupInvite(
   inviteId: string,
   accept: boolean,
 ) {
-  if (shouldUsePreviewData(identity)) return respondToPreviewGroupInvite(inviteId, accept);
-  return request<{ status: string }>(
+  if (shouldUsePreviewData(identity))
+    return respondToPreviewGroupInvite(identity, inviteId, accept);
+  return request<GroupInviteResponse>(
     `/group/invite/${encodeURIComponent(inviteId)}/respond`,
     { method: 'POST', body: JSON.stringify({ accept }) },
-    identity.accessToken,
-  );
-}
-export function confirmGroupInvite(identity: ParticipantIdentity, inviteId: string, code: string) {
-  if (shouldUsePreviewData(identity)) return confirmPreviewGroupInvite(identity, inviteId, code);
-  return request<ConfirmGroupInviteResult>(
-    `/group/invite/${encodeURIComponent(inviteId)}/confirm`,
-    { method: 'POST', body: JSON.stringify({ code: code.trim() }) },
     identity.accessToken,
   );
 }

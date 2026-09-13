@@ -2,9 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
   Channel,
   ChannelMessage,
-  ConfirmGroupInviteResult,
   Group,
   GroupInvite,
+  GroupInviteResponse,
   GroupMember,
   ParticipantIdentity,
   ParticipantSearchResult,
@@ -66,10 +66,8 @@ interface StoredPreviewGroupInvite {
   group_id: string;
   from_user_id: string;
   to_user_id: string;
-  confirmation_code: string;
-  status: 'pending' | 'confirmed' | 'declined';
+  status: 'pending' | 'accepted' | 'confirmed' | 'declined';
   created_at: string;
-  expires_at: string;
 }
 
 const REQUESTS_KEY = 'hackmatch-preview-requests';
@@ -132,10 +130,11 @@ function isStoredPreviewGroupInvite(value: unknown): value is StoredPreviewGroup
     typeof value.group_id === 'string' &&
     typeof value.from_user_id === 'string' &&
     typeof value.to_user_id === 'string' &&
-    typeof value.confirmation_code === 'string' &&
-    (value.status === 'pending' || value.status === 'confirmed' || value.status === 'declined') &&
-    typeof value.created_at === 'string' &&
-    typeof value.expires_at === 'string'
+    (value.status === 'pending' ||
+      value.status === 'accepted' ||
+      value.status === 'confirmed' ||
+      value.status === 'declined') &&
+    typeof value.created_at === 'string'
   );
 }
 
@@ -225,12 +224,9 @@ function previewGroupInvite(
     to_user_id: invite.to_user_id,
     from_name: participantName(invite.from_user_id),
     to_name: participantName(invite.to_user_id),
-    status: invite.status,
+    status: invite.status === 'confirmed' ? 'accepted' : invite.status,
     direction: invite.from_user_id === identity.userId ? 'outgoing' : 'incoming',
     created_at: invite.created_at,
-    expires_at: invite.expires_at,
-    confirmation_required: invite.status === 'pending',
-    direct_conversation_id: invite.id,
   };
 }
 
@@ -257,27 +253,10 @@ export async function createPreviewGroupInvite(
     group_id: groupId,
     from_user_id: identity.userId,
     to_user_id: toUserId,
-    confirmation_code: String(Math.floor(100000 + Math.random() * 900000)),
     status: 'pending',
     created_at: new Date(timestamp).toISOString(),
-    expires_at: new Date(timestamp + 24 * 60 * 60 * 1000).toISOString(),
   };
   await AsyncStorage.setItem(GROUP_INVITES_KEY, JSON.stringify([invite, ...invites]));
-
-  const conversationKey = [identity.userId, toUserId].sort().join(':');
-  const messages = await readPreviewMessages(conversationKey);
-  const message: ChannelMessage = {
-    id: `preview-message-${timestamp}`,
-    channel_id: conversationKey,
-    user_id: identity.userId,
-    author_name: identity.name,
-    body: `Invitation code for ${group.name}: ${invite.confirmation_code}. Enter this code in Activity to join the team.`,
-    created_at: invite.created_at,
-  };
-  await AsyncStorage.setItem(
-    `${MESSAGE_KEY_PREFIX}${conversationKey}`,
-    JSON.stringify([...messages, message]),
-  );
   return previewGroupInvite(invite, group, identity);
 }
 
@@ -298,59 +277,47 @@ export async function getPreviewGroupInvites(
     );
 }
 
-export async function respondToPreviewGroupInvite(inviteId: string, accept: boolean) {
-  if (accept) throw new Error('Enter the invitation code to join this team.');
-  const invites = await readPreviewGroupInvites();
-  const invite = invites.find((item) => item.id === inviteId);
-  if (!invite) throw new Error('This team invitation could not be found.');
-  const next = invites.map((item) =>
-    item.id === inviteId ? { ...item, status: 'declined' as const } : item,
-  );
-  await AsyncStorage.setItem(GROUP_INVITES_KEY, JSON.stringify(next));
-  return { status: 'declined' };
-}
-
-export async function confirmPreviewGroupInvite(
+export async function respondToPreviewGroupInvite(
   identity: ParticipantIdentity,
   inviteId: string,
-  code: string,
-): Promise<ConfirmGroupInviteResult> {
+  accept: boolean,
+): Promise<GroupInviteResponse> {
   const [invites, groups] = await Promise.all([readPreviewGroupInvites(), readPreviewGroups()]);
   const invite = invites.find((item) => item.id === inviteId);
   if (!invite || invite.to_user_id !== identity.userId) {
     throw new Error('This team invitation is not available for this account.');
   }
-  if (invite.status !== 'pending') throw new Error('This invitation has already been used.');
-  if (Date.parse(invite.expires_at) < Date.now())
-    throw new Error('This invitation code has expired.');
-  if (invite.confirmation_code !== code.trim())
-    throw new Error('That invitation code is incorrect.');
+  if (invite.status !== 'pending') throw new Error('This invitation has already been answered.');
 
   const group = groups.find((item) => item.id === invite.group_id);
   if (!group) throw new Error('This team is no longer available.');
-  const nextInvites = invites.map((item) =>
-    item.id === inviteId ? { ...item, status: 'confirmed' as const } : item,
-  );
-  const nextGroups = groups.map((item) =>
-    item.id === group.id && !item.member_user_ids.includes(identity.userId)
-      ? { ...item, member_user_ids: [...item.member_user_ids, identity.userId] }
-      : item,
-  );
+  const status = accept ? ('accepted' as const) : ('declined' as const);
+  const nextInvites = invites.map((item) => (item.id === inviteId ? { ...item, status } : item));
+  const nextGroups = accept
+    ? groups.map((item) =>
+        item.id === group.id && !item.member_user_ids.includes(identity.userId)
+          ? { ...item, member_user_ids: [...item.member_user_ids, identity.userId] }
+          : item,
+      )
+    : groups;
   await Promise.all([
     AsyncStorage.setItem(GROUP_INVITES_KEY, JSON.stringify(nextInvites)),
     AsyncStorage.setItem(GROUPS_KEY, JSON.stringify(nextGroups)),
   ]);
+
   return {
-    status: 'confirmed',
+    status,
     group_id: group.id,
-    channel: {
-      id: `preview-channel-${group.id}`,
-      name: group.name,
-      description: 'Your private team collaboration space.',
-      type: 'my_group',
-      group_id: group.id,
-      allows_posting: true,
-    },
+    channel: accept
+      ? {
+          id: `preview-channel-${group.id}`,
+          name: group.name,
+          description: 'Your private team collaboration space.',
+          type: 'my_group',
+          group_id: group.id,
+          allows_posting: true,
+        }
+      : undefined,
   };
 }
 

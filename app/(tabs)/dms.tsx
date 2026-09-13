@@ -25,7 +25,7 @@ function toDirectConversation(
   const participantId = outgoing ? item.to_user_id : item.from_user_id;
   if (!participantId) return null;
   return {
-    conversationId: item.direct_conversation_id ?? item.id,
+    conversationId: item.id,
     participantId,
     personName: outgoing ? (item.to_name ?? 'Participant') : (item.from_name ?? 'Participant'),
     createdAt: item.created_at ?? '',
